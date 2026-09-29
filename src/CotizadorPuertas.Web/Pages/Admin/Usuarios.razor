@@ -1,0 +1,173 @@
+@page "/admin/usuarios"
+@inject CotizacionService Cots
+@inject AuthService Auth
+@inject IJSRuntime JS
+
+<h1>Usuarios</h1>
+
+@if (!Auth.EsAdmin)
+{
+    <div class="aviso error">Solo el administrador puede gestionar usuarios.</div>
+}
+else
+{
+    @if (mensaje is not null)
+    {
+        <div class="aviso @(mensajeOk ? "ok" : "error")">@mensaje</div>
+    }
+
+    <div class="tarjeta">
+        <h2>@(editando is null ? "Crear usuario" : $"Editar a {editando.Nombre}")</h2>
+        <div class="campos">
+            <label class="campo">Nombre
+                <input @bind="nombre" />
+            </label>
+            <label class="campo">Correo
+                <input type="email" @bind="correo" autocomplete="off" />
+            </label>
+            <label class="campo">@(editando is null ? "Contraseña" : "Contraseña nueva (opcional)")
+                <input type="text" @bind="clave" autocomplete="new-password" placeholder="Mínimo 6 caracteres" />
+            </label>
+            @if (editando is null)
+            {
+                <label class="campo">Rol
+                    <select @bind="rol">
+                        <option value="Vendedor">Vendedor</option>
+                        <option value="Admin">Admin</option>
+                    </select>
+                </label>
+            }
+        </div>
+        <div class="acciones" style="margin-top:.8rem">
+            <button class="btn" @onclick="Guardar" disabled="@ocupado">@(editando is null ? "Crear usuario" : "Guardar cambios")</button>
+            @if (editando is not null)
+            {
+                <button class="btn gris" @onclick="Limpiar">Cancelar</button>
+                @if (editando.Id != Auth.UsuarioId)
+                {
+                    <button class="btn peligro" @onclick="Eliminar" disabled="@ocupado">Eliminar cuenta</button>
+                }
+            }
+        </div>
+        <p class="muted" style="margin-bottom:0">El <b>Vendedor</b> solo cotiza y ve sus propios proyectos. El <b>Admin</b> ve todo, el dashboard, precios, productos y usuarios.</p>
+    </div>
+
+    <div class="tarjeta">
+        <h2>Cuentas</h2>
+        <table class="tabla">
+            <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Activo</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var u in usuarios)
+                {
+                    var us = u;
+                    var yo = us.Id == Auth.UsuarioId;
+                    <tr @key="us.Id">
+                        <td>@us.Nombre @(yo ? "(tú)" : "")</td>
+                        <td>@us.Email</td>
+                        <td>
+                            <select @bind="us.Rol" @bind:after="() => GuardarPerfil(us)" disabled="@yo" style="width:auto">
+                                <option value="Vendedor">Vendedor</option>
+                                <option value="Admin">Admin</option>
+                            </select>
+                        </td>
+                        <td><input type="checkbox" style="width:auto" @bind="us.Activo" @bind:after="() => GuardarPerfil(us)" disabled="@yo" /></td>
+                        <td><button class="btn gris chico" @onclick="() => Editar(us)">Editar</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<Profile> usuarios = new();
+    private Profile? editando;
+    private string nombre = "";
+    private string correo = "";
+    private string clave = "";
+    private string rol = "Vendedor";
+    private bool ocupado;
+    private string? mensaje;
+    private bool mensajeOk;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Auth.EsAdmin) await Recargar();
+    }
+
+    private async Task Recargar()
+    {
+        try { usuarios = await Cots.Usuarios(); }
+        catch (Exception ex) { mensaje = ex.Message; mensajeOk = false; }
+    }
+
+    private void Limpiar()
+    {
+        editando = null;
+        nombre = correo = clave = "";
+        rol = "Vendedor";
+    }
+
+    private void Editar(Profile u)
+    {
+        editando = u;
+        nombre = u.Nombre;
+        correo = u.Email ?? "";
+        clave = "";
+    }
+
+    private async Task GuardarPerfil(Profile u)
+    {
+        try
+        {
+            await Cots.GuardarPerfil(u);
+            mensaje = $"{u.Nombre}: {u.Rol}, {(u.Activo ? "activo" : "inactivo")}.";
+            mensajeOk = true;
+        }
+        catch (Exception ex) { mensaje = ex.Message; mensajeOk = false; }
+    }
+
+    private async Task Guardar()
+    {
+        mensaje = null;
+        if (string.IsNullOrWhiteSpace(nombre) || !correo.Contains('@')) { mensaje = "Escribe el nombre y un correo válido."; mensajeOk = false; return; }
+        if ((editando is null || clave != "") && clave.Length < 6) { mensaje = "La contraseña debe tener al menos 6 caracteres."; mensajeOk = false; return; }
+        ocupado = true;
+        var cuerpo = new Dictionary<string, object?>
+        {
+            ["action"] = editando is null ? "crear" : "actualizar",
+            ["nombre"] = nombre.Trim(),
+        };
+        if (editando is null)
+        {
+            cuerpo["email"] = correo.Trim();
+            cuerpo["password"] = clave;
+            cuerpo["rol"] = rol;
+        }
+        else
+        {
+            cuerpo["userId"] = editando.Id;
+            if (!string.Equals(correo.Trim(), editando.Email, StringComparison.OrdinalIgnoreCase)) cuerpo["email"] = correo.Trim();
+            if (clave != "") cuerpo["password"] = clave;
+        }
+        var (ok, error) = await Auth.Usuarios(cuerpo);
+        ocupado = false;
+        if (!ok) { mensaje = error; mensajeOk = false; return; }
+        mensaje = editando is null ? $"Se creó la cuenta de {nombre}. Ya puede entrar con su correo y la contraseña." : "Cambios guardados.";
+        mensajeOk = true;
+        Limpiar();
+        await Recargar();
+    }
+
+    private async Task Eliminar()
+    {
+        if (editando is null) return;
+        if (!await JS.InvokeAsync<bool>("confirm", $"¿Eliminar la cuenta de {editando.Nombre}? Si tiene cotizaciones, mejor desactívala.")) return;
+        ocupado = true;
+        var (ok, error) = await Auth.Usuarios(new Dictionary<string, object?> { ["action"] = "eliminar", ["userId"] = editando.Id });
+        ocupado = false;
+        mensaje = ok ? "Cuenta eliminada." : error;
+        mensajeOk = ok;
+        if (ok) { Limpiar(); await Recargar(); }
+    }
+}

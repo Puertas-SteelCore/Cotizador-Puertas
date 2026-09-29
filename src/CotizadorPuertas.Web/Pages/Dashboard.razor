@@ -1,0 +1,248 @@
+@page "/dashboard"
+@inject CotizacionService Cots
+@inject AuthService Auth
+
+<h1>Dashboard</h1>
+
+@if (!Auth.EsAdmin)
+{
+    <div class="aviso error">Solo el administrador puede ver el dashboard.</div>
+}
+else if (cargando)
+{
+    <p class="muted">Cargando…</p>
+}
+else
+{
+    @if (error is not null)
+    {
+        <div class="aviso error">@error</div>
+    }
+    <div class="tarjeta">
+        <div class="filtros" style="margin:0">
+            <label class="campo">Moneda
+                <select @bind="moneda">
+                    <option value="MXN">Pesos (MXN)</option>
+                    <option value="USD">Dólares (USD)</option>
+                </select>
+            </label>
+            <label class="campo">Desde
+                <input type="date" @bind="desde" @bind:format="yyyy-MM-dd" />
+            </label>
+            <label class="campo">Hasta
+                <input type="date" @bind="hasta" @bind:format="yyyy-MM-dd" />
+            </label>
+            <label class="campo">Vendedor
+                <select @bind="vendedor">
+                    <option value="">Todos</option>
+                    @foreach (var v in lista.Select(c => c.Vendedor).Where(v => v != "").Distinct().OrderBy(v => v))
+                    {
+                        <option value="@v">@v</option>
+                    }
+                </select>
+            </label>
+        </div>
+    </div>
+
+    var datos = Datos.ToList();
+    var ganadas = datos.Where(c => c.Estado == "Ganada").ToList();
+    var perdidas = datos.Where(c => c.Estado == "Perdida").ToList();
+    var proceso = datos.Where(c => c.Estado == "En proceso").ToList();
+    var cerradas = ganadas.Count + perdidas.Count;
+
+    <div class="kpis">
+        <div class="kpi cotizado">
+            <div class="etq">Cotizado</div>
+            <div class="val">@Fmt.Dinero(datos.Sum(c => c.Total))</div>
+            <div class="sub">@datos.Count cotizaciones · @datos.Sum(c => c.Puertas) puertas</div>
+        </div>
+        <div class="kpi ganado">
+            <div class="etq">Ganado</div>
+            <div class="val">@Fmt.Dinero(ganadas.Sum(c => c.Total))</div>
+            <div class="sub">@ganadas.Count cotizaciones · @ganadas.Sum(c => c.Puertas) puertas</div>
+        </div>
+        <div class="kpi perdido">
+            <div class="etq">Perdido</div>
+            <div class="val">@Fmt.Dinero(perdidas.Sum(c => c.Total))</div>
+            <div class="sub">@perdidas.Count cotizaciones</div>
+        </div>
+        <div class="kpi">
+            <div class="etq">En proceso</div>
+            <div class="val">@Fmt.Dinero(proceso.Sum(c => c.Total))</div>
+            <div class="sub">@proceso.Count cotizaciones</div>
+        </div>
+        <div class="kpi">
+            <div class="etq">Tasa de cierre</div>
+            <div class="val">@(cerradas == 0 ? "—" : Fmt.Pct((decimal)ganadas.Count / cerradas))</div>
+            <div class="sub">ganadas entre ganadas + perdidas</div>
+        </div>
+    </div>
+
+    <div class="graficas">
+        <div class="tarjeta">
+            <h2>Cotizado vs. ganado por mes <span class="chip">@moneda</span></h2>
+            @{ var meses = Meses(datos); }
+            <div class="scroll">
+                @((MarkupString)Grafica(meses))
+            </div>
+            <div class="leyenda">
+                <span><i style="background:#2474b5"></i>Cotizado</span>
+                <span><i style="background:#d9822b"></i>Ganado</span>
+            </div>
+            <details style="margin-top:.6rem">
+                <summary class="muted" style="cursor:pointer">Ver tabla</summary>
+                <table class="tabla" style="margin-top:.5rem">
+                    <thead><tr><th>Mes</th><th class="num">Cotizaciones</th><th class="num">Cotizado</th><th class="num">Ganadas</th><th class="num">Ganado</th></tr></thead>
+                    <tbody>
+                        @foreach (var m in meses)
+                        {
+                            <tr><td>@m.Etiqueta</td><td class="num">@m.N</td><td class="num">@Fmt.Dinero(m.Cotizado)</td><td class="num">@m.NG</td><td class="num">@Fmt.Dinero(m.Ganado)</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </details>
+        </div>
+
+        <div class="tarjeta">
+            <h2>Por estado</h2>
+            @{
+                var totalMonto = Math.Max(1m, datos.Sum(c => c.Total));
+            }
+            @foreach (var (nombre, grupo, color) in new[] { ("Ganada", ganadas, "#1e7a46"), ("En proceso", proceso, "#b7791f"), ("Perdida", perdidas, "#b42318") })
+            {
+                var monto = grupo.Sum(c => c.Total);
+                <div style="margin-bottom:.9rem">
+                    <div style="display:flex;justify-content:space-between;font-size:.9rem;margin-bottom:.25rem">
+                        <span class="estado @Fmt.ClaseEstado(nombre)">@nombre</span>
+                        <span>@Fmt.Dinero(monto) <span class="muted">· @grupo.Count</span></span>
+                    </div>
+                    <div class="barra-h"><span style="width:@Fmt.F((double)(monto / totalMonto * 100))%;background:@color"></span></div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <h2>Por vendedor</h2>
+        <div class="scroll">
+            <table class="tabla">
+                <thead>
+                    <tr><th>Vendedor</th><th class="num">Cotizaciones</th><th class="num">Cotizado</th><th class="num">Ganado</th><th class="num">Perdido</th><th class="num">En proceso</th><th class="num">Tasa de cierre</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var g in datos.GroupBy(c => string.IsNullOrWhiteSpace(c.Vendedor) ? "(sin nombre)" : c.Vendedor).OrderByDescending(g => g.Sum(c => c.Total)))
+                    {
+                        var gg = g.Count(c => c.Estado == "Ganada");
+                        var gp = g.Count(c => c.Estado == "Perdida");
+                        <tr>
+                            <td>@g.Key</td>
+                            <td class="num">@g.Count()</td>
+                            <td class="num">@Fmt.Dinero(g.Sum(c => c.Total))</td>
+                            <td class="num">@Fmt.Dinero(g.Where(c => c.Estado == "Ganada").Sum(c => c.Total))</td>
+                            <td class="num">@Fmt.Dinero(g.Where(c => c.Estado == "Perdida").Sum(c => c.Total))</td>
+                            <td class="num">@Fmt.Dinero(g.Where(c => c.Estado == "En proceso").Sum(c => c.Total))</td>
+                            <td class="num">@(gg + gp == 0 ? "—" : Fmt.Pct((decimal)gg / (gg + gp)))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <h2>Últimas ganadas</h2>
+        @if (ganadas.Count == 0)
+        {
+            <div class="vacio">Todavía no hay cotizaciones ganadas en este periodo.</div>
+        }
+        else
+        {
+            <table class="tabla">
+                <thead><tr><th>Folio</th><th>Fecha</th><th>Obra</th><th>Vendedor</th><th class="num">Puertas</th><th class="num">Total</th></tr></thead>
+                <tbody>
+                    @foreach (var c in ganadas.OrderByDescending(c => c.Fecha).Take(10))
+                    {
+                        <tr><td><a href="cotizar/@c.Id">@c.Numero</a></td><td>@c.Fecha.ToString("dd/MM/yyyy")</td><td>@c.Obra</td><td>@c.Vendedor</td><td class="num">@c.Puertas</td><td class="num">@Fmt.Dinero(c.Total)</td></tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+
+@code {
+    private List<CotizacionDb> lista = new();
+    private bool cargando = true;
+    private string? error;
+    private string moneda = "MXN";
+    private string vendedor = "";
+    private DateTime? desde = new DateTime(DateTime.Today.Year, 1, 1);
+    private DateTime? hasta;
+
+    private static readonly string[] NombresMes = { "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic" };
+
+    private record Mes(string Etiqueta, string Corta, decimal Cotizado, decimal Ganado, int N, int NG);
+
+    private IEnumerable<CotizacionDb> Datos => lista.Where(c =>
+        c.Moneda == moneda &&
+        (vendedor == "" || c.Vendedor == vendedor) &&
+        (desde is null || c.Fecha >= desde) &&
+        (hasta is null || c.Fecha <= hasta));
+
+    private List<Mes> Meses(List<CotizacionDb> datos)
+    {
+        var fin = hasta ?? DateTime.Today;
+        var ini = desde ?? (datos.Count > 0 ? datos.Min(c => c.Fecha) : fin.AddMonths(-11));
+        var inicio = new DateTime(ini.Year, ini.Month, 1);
+        var final = new DateTime(fin.Year, fin.Month, 1);
+        if ((final.Year - inicio.Year) * 12 + final.Month - inicio.Month > 23) inicio = final.AddMonths(-23);
+        var r = new List<Mes>();
+        for (var m = inicio; m <= final; m = m.AddMonths(1))
+        {
+            var delMes = datos.Where(c => c.Fecha.Year == m.Year && c.Fecha.Month == m.Month).ToList();
+            var gan = delMes.Where(c => c.Estado == "Ganada").ToList();
+            r.Add(new Mes($"{NombresMes[m.Month - 1]} {m.Year}", $"{NombresMes[m.Month - 1]} {m:yy}",
+                delMes.Sum(c => c.Total), gan.Sum(c => c.Total), delMes.Count, gan.Count));
+        }
+        return r;
+    }
+
+    private static string Grafica(List<Mes> meses)
+    {
+        const int alto = 200, izq = 60, anchoMes = 56;
+        var max = Math.Max(1m, meses.Select(m => Math.Max(m.Cotizado, m.Ganado)).DefaultIfEmpty(0).Max());
+        var ancho = izq + meses.Count * anchoMes + 8;
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"<svg width=\"{ancho}\" height=\"{alto + 40}\" role=\"img\" aria-label=\"Cotizado y ganado por mes\" style=\"display:block\">");
+        for (var k = 0; k <= 4; k++)
+        {
+            var yv = 10 + alto - alto * k / 4.0;
+            sb.Append($"<line x1=\"{izq}\" x2=\"{ancho - 4}\" y1=\"{Fmt.F(yv)}\" y2=\"{Fmt.F(yv)}\" stroke=\"#e5e7eb\"/>");
+            sb.Append($"<text x=\"{izq - 6}\" y=\"{Fmt.F(yv + 4)}\" text-anchor=\"end\" font-size=\"11\" fill=\"#6b7280\">{Enc(Fmt.Corto(max * k / 4))}</text>");
+        }
+        for (var n = 0; n < meses.Count; n++)
+        {
+            var m = meses[n];
+            var x0 = izq + n * anchoMes + 8;
+            var hc = (double)(m.Cotizado / max) * alto;
+            var hg = (double)(m.Ganado / max) * alto;
+            sb.Append("<g><title>").Append(Enc($"{m.Etiqueta}: cotizado {Fmt.Dinero(m.Cotizado)} ({m.N}) · ganado {Fmt.Dinero(m.Ganado)} ({m.NG})")).Append("</title>");
+            sb.Append($"<rect x=\"{x0 - 6}\" y=\"10\" width=\"{anchoMes}\" height=\"{alto}\" fill=\"transparent\"/>");
+            if (hc > 0) sb.Append($"<rect x=\"{x0}\" y=\"{Fmt.F(10 + alto - hc)}\" width=\"18\" height=\"{Fmt.F(hc)}\" rx=\"3\" fill=\"#2474b5\"/>");
+            if (hg > 0) sb.Append($"<rect x=\"{x0 + 20}\" y=\"{Fmt.F(10 + alto - hg)}\" width=\"18\" height=\"{Fmt.F(hg)}\" rx=\"3\" fill=\"#d9822b\"/>");
+            sb.Append($"<text x=\"{x0 + 19}\" y=\"{alto + 28}\" text-anchor=\"middle\" font-size=\"11\" fill=\"#6b7280\">{Enc(m.Corta)}</text></g>");
+        }
+        sb.Append($"<line x1=\"{izq}\" x2=\"{ancho - 4}\" y1=\"{10 + alto}\" y2=\"{10 + alto}\" stroke=\"#9aa3ab\"/></svg>");
+        return sb.ToString();
+    }
+
+    private static string Enc(string s) => System.Net.WebUtility.HtmlEncode(s);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Auth.EsAdmin) { cargando = false; return; }
+        try { lista = await Cots.Listar(); }
+        catch (Exception ex) { error = ex.Message; }
+        cargando = false;
+    }
+}

@@ -1,0 +1,64 @@
+@inherits LayoutComponentBase
+@inject AuthService Auth
+@inject HttpClient Http
+@implements IDisposable
+
+@if (!Auth.Listo)
+{
+    <div class="arranque">
+        <img src="img/puertas-modumex.png" alt="Puertas Modumex" />
+        <div class="arranque-barra"><span></span></div>
+    </div>
+}
+else if (!Auth.Autenticado)
+{
+    <Login />
+}
+else
+{
+    <div class="app @(abierto ? "abierto" : "")">
+        <aside class="lateral" @onclick="() => abierto = false">
+            <div class="marca"><img src="img/puertas-modumex.png" alt="Puertas Modumex" /></div>
+            <nav>
+                <NavLink href="" Match="NavLinkMatch.All">Cotizar</NavLink>
+                <NavLink href="proyectos">@(Auth.EsAdmin ? "Proyectos" : "Mis proyectos")</NavLink>
+                @if (Auth.EsAdmin)
+                {
+                    <NavLink href="dashboard">Dashboard</NavLink>
+                    <div class="grupo">Administración</div>
+                    <NavLink href="admin/precios">Precios</NavLink>
+                    <NavLink href="admin/productos">Productos y colores</NavLink>
+                    <NavLink href="admin/usuarios">Usuarios</NavLink>
+                    <NavLink href="admin/ajustes">Ajustes</NavLink>
+                }
+            </nav>
+            <div class="pie">Puertas SteelCore · versión @version</div>
+        </aside>
+        <div class="principal">
+            <header class="barra">
+                <button class="menu-btn" @onclick="() => abierto = !abierto">☰</button>
+                <span class="usuario">@Auth.Nombre · <b>@Auth.Perfil?.Rol</b></span>
+                <button class="btn gris chico" @onclick="Salir">Salir</button>
+            </header>
+            <main class="contenido">
+                @Body
+            </main>
+        </div>
+    </div>
+}
+<div class="sello">v@(version)</div>
+
+@code {
+    private bool abierto;
+    private string version = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Auth.Cambio += Refrescar;
+        try { version = (await Http.GetStringAsync("version.txt?_=" + DateTime.Now.Ticks)).Trim().Trim('﻿'); } catch { }
+    }
+
+    private void Refrescar() => InvokeAsync(StateHasChanged);
+    private async Task Salir() => await Auth.CerrarSesion();
+    public void Dispose() => Auth.Cambio -= Refrescar;
+}

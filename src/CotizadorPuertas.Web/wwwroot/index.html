@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cotizador Puertas SteelCore</title>
+    <base href="/" />
+    <link rel="preload" id="webassembly" />
+    <link rel="stylesheet" href="css/app.css?v=1" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <script type="importmap"></script>
+    <script>window.__APP_VER = "1";</script>
+</head>
+
+<body>
+    <div id="app">
+        <div class="arranque">
+            <img src="img/puertas-modumex.png" alt="Puertas Modumex" />
+            <div class="arranque-barra"><span></span></div>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui">
+        Ocurrió un error inesperado.
+        <a href="." class="reload">Recargar</a>
+        <span class="dismiss">×</span>
+    </div>
+    <script src="lib/jspdf/jspdf.umd.min.js?v=1"></script>
+    <script src="lib/jspdf/jspdf.plugin.autotable.min.js?v=1"></script>
+    <script src="lib/exceljs/exceljs.min.js?v=1"></script>
+    <script src="js/fns.js?v=1"></script>
+    <script src="js/imagenes.js?v=1"></script>
+    <script src="js/pdf.js?v=1"></script>
+    <script src="js/excel.js?v=1"></script>
+    <script src="_framework/blazor.webassembly#[.{fingerprint}].js" autostart="false"></script>
+    <script>
+      (function () {
+        function cargar(type, name, uri, integrity) {
+          if (type === "dotnetjs") return undefined;
+          return (async function () {
+            var ultimo;
+            for (var i = 0; i < 5; i++) {
+              try {
+                var r = await fetch(uri, { cache: i === 0 ? "default" : "reload", integrity: integrity || undefined });
+                if (r.ok) return r;
+                ultimo = new Error("HTTP " + r.status + " en " + name);
+              } catch (e) { ultimo = e; }
+              await new Promise(function (ok) { setTimeout(ok, 500 * (i + 1)); });
+            }
+            throw ultimo;
+          })();
+        }
+        Blazor.start({ loadBootResource: cargar }).catch(function (e) { console.error(e); });
+      })();
+    </script>
+    <script>
+      (function () {
+        var KEY = "puertas_reintento";
+        function recargar() {
+          var u = location.href.split("#")[0].replace(/[?&](cb|v)=[^&]*/g, "");
+          u += (u.indexOf("?") >= 0 ? "&" : "?") + "v=" + encodeURIComponent(window.__APP_VER || "") + "&cb=" + Date.now();
+          location.replace(u);
+        }
+        function revisarVersion() {
+          try {
+            fetch("version.txt?_=" + Date.now(), { cache: "no-store" })
+              .then(function (r) { return r.ok ? r.text() : null; })
+              .then(function (remoto) {
+                if (!remoto) return;
+                remoto = remoto.trim();
+                if (remoto && remoto !== window.__APP_VER) {
+                  if (sessionStorage.getItem("puertas_ver") !== remoto) {
+                    sessionStorage.setItem("puertas_ver", remoto);
+                    recargar();
+                  }
+                } else {
+                  sessionStorage.removeItem("puertas_ver");
+                }
+              }).catch(function () { });
+          } catch (e) { }
+        }
+        revisarVersion();
+        document.addEventListener("visibilitychange", function () { if (!document.hidden) revisarVersion(); });
+        window.addEventListener("focus", revisarVersion);
+        setInterval(revisarVersion, 300000);
+        setTimeout(function () {
+          var cargando = !!document.querySelector("#app .arranque");
+          var eu = document.getElementById("blazor-error-ui");
+          var fallo = cargando || (eu && getComputedStyle(eu).display !== "none");
+          if (fallo && !sessionStorage.getItem(KEY)) {
+            sessionStorage.setItem(KEY, "1");
+            recargar();
+          } else if (!fallo) {
+            sessionStorage.removeItem(KEY);
+            if (/[?&]cb=/.test(location.href)) {
+              try { history.replaceState(null, "", location.href.replace(/[?&](cb|v)=[^&]*/g, "").replace(/[?&]$/, "")); } catch (e) { }
+            }
+          }
+        }, 20000);
+      })();
+    </script>
+</body>
+
+</html>

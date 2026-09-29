@@ -1,0 +1,114 @@
+@page "/admin/ajustes"
+@inject CatalogoService Cat
+@inject AuthService Auth
+
+<h1>Ajustes</h1>
+
+@if (!Auth.EsAdmin)
+{
+    <div class="aviso error">Solo el administrador puede cambiar los ajustes.</div>
+}
+else if (valores is null)
+{
+    <p class="muted">Cargando…</p>
+}
+else
+{
+    @if (mensaje is not null)
+    {
+        <div class="aviso @(mensajeOk ? "ok" : "error")">@mensaje</div>
+    }
+    <p class="muted">Estos textos y valores se usan en las cotizaciones <b>nuevas</b>. Las que ya están guardadas no cambian.</p>
+
+    <div class="tarjeta">
+        <h2>Datos bancarios</h2>
+        <div class="campos" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+            <label class="campo">Cuenta en pesos (sale cuando la cotización es en MXN)
+                <textarea rows="7" @bind='valores["banco_mxn"]'></textarea>
+            </label>
+            <label class="campo">Cuenta en dólares (sale cuando la cotización es en USD)
+                <textarea rows="7" @bind='valores["banco_usd"]'></textarea>
+            </label>
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <h2>Cálculo</h2>
+        <div class="campos">
+            <label class="campo">IVA (0.16 = 16%)
+                <input @bind='valores["iva"]' />
+            </label>
+            <label class="campo">Anticipo (0.60 = 60%)
+                <input @bind='valores["anticipo"]' />
+            </label>
+            <label class="campo">Antepecho = precio de la puerta ×
+                <input @bind='valores["antepecho_factor"]' />
+            </label>
+            <label class="campo ancho2">Descripción de la puerta
+                <input @bind='valores["desc_puerta"]' />
+            </label>
+            <label class="campo ancho2">Descripción del antepecho
+                <input @bind='valores["desc_antepecho"]' />
+            </label>
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <h2>Textos de la cotización</h2>
+        <div class="campos" style="grid-template-columns:1fr">
+            <label class="campo">Especificación ({perfil} se cambia por el color del perfil)
+                <textarea rows="3" @bind='valores["especificacion"]'></textarea>
+            </label>
+            <label class="campo">Tiempo de entrega
+                <textarea rows="3" @bind='valores["tiempo_entrega"]'></textarea>
+            </label>
+            <label class="campo">Observaciones
+                <textarea rows="5" @bind='valores["observaciones"]'></textarea>
+            </label>
+            <label class="campo">Firma (una línea por renglón)
+                <textarea rows="2" @bind='valores["firma"]'></textarea>
+            </label>
+        </div>
+    </div>
+
+    <button class="btn" @onclick="Guardar" disabled="@ocupado">Guardar ajustes</button>
+}
+
+@code {
+    private static readonly string[] Claves =
+        { "banco_mxn", "banco_usd", "iva", "anticipo", "antepecho_factor", "desc_puerta", "desc_antepecho", "especificacion", "tiempo_entrega", "observaciones", "firma" };
+
+    private Dictionary<string, string>? valores;
+    private bool ocupado;
+    private string? mensaje;
+    private bool mensajeOk;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Auth.EsAdmin) return;
+        try
+        {
+            await Cat.Cargar(true);
+            valores = Claves.ToDictionary(k => k, k => Cat.Ajustes.TryGetValue(k, out var v) ? v : "");
+        }
+        catch (Exception ex) { mensaje = ex.Message; mensajeOk = false; valores = Claves.ToDictionary(k => k, k => ""); }
+    }
+
+    private async Task Guardar()
+    {
+        if (valores is null) return;
+        foreach (var k in new[] { "iva", "anticipo", "antepecho_factor" })
+        {
+            if (!decimal.TryParse(valores[k], NumberStyles.Any, CultureInfo.InvariantCulture, out var d) || d < 0 || d > 1)
+            {
+                mensaje = $"El valor de {k} debe ser un número entre 0 y 1 con punto decimal (por ejemplo 0.16).";
+                mensajeOk = false;
+                return;
+            }
+        }
+        ocupado = true;
+        try { await Cat.GuardarAjustes(valores); mensaje = "Ajustes guardados."; mensajeOk = true; }
+        catch (Exception ex) { mensaje = "No se pudo guardar: " + ex.Message; mensajeOk = false; }
+        ocupado = false;
+    }
+}

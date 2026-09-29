@@ -1,0 +1,153 @@
+@page "/admin/precios"
+@inject CatalogoService Cat
+@inject AuthService Auth
+@inject IJSRuntime JS
+
+<h1>Precios</h1>
+
+@if (!Auth.EsAdmin)
+{
+    <div class="aviso error">Solo el administrador puede cambiar precios.</div>
+}
+else if (!Cat.Cargado)
+{
+    <p class="muted">Cargando…</p>
+}
+else
+{
+    @if (mensaje is not null)
+    {
+        <div class="aviso @(mensajeOk ? "ok" : "error")">@mensaje</div>
+    }
+
+    <div class="tarjeta">
+        <h2>Precio de la puerta por medida de hoja
+            <span class="der"><button class="btn chico" @onclick="AgregarTarifa">+ Rango</button></span>
+        </h2>
+        <p class="muted" style="margin-top:0">La puerta toma el primer rango donde entran su ancho y su alto de hoja (vano − 0.07 m de ancho, entre 2 si es doble; vano − 0.04 m de alto).</p>
+        <table class="tabla" style="max-width:760px">
+            <thead><tr><th class="num">Ancho de hoja hasta (m)</th><th class="num">Alto de hoja hasta (m)</th><th class="num">Precio MXN</th><th class="num">Precio USD</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var t in Cat.Tarifas)
+                {
+                    var ta = t;
+                    <tr @key="ta">
+                        <td><input type="number" step="0.01" class="num" @bind="ta.AnchoHasta" @bind:after="() => GuardarTarifa(ta)" /></td>
+                        <td><input type="number" step="0.01" class="num" @bind="ta.AltoHasta" @bind:after="() => GuardarTarifa(ta)" /></td>
+                        <td><input type="number" step="0.01" class="num" @bind="ta.PrecioMxn" @bind:after="() => GuardarTarifa(ta)" /></td>
+                        <td><input type="number" step="0.01" class="num" @bind="ta.PrecioUsd" @bind:after="() => GuardarTarifa(ta)" /></td>
+                        <td><button class="x" title="Borrar rango" @onclick="() => BorrarTarifa(ta)">×</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="tarjeta">
+        <h2>Precios de insumos</h2>
+        <div class="filtros">
+            <label class="campo">Categoría
+                <select @bind="categoria">
+                    <option value="">Todas</option>
+                    @foreach (var c in Categorias.Catalogo)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </label>
+            <label class="campo" style="flex:1;min-width:220px">Buscar
+                <input @bind="buscar" @bind:event="oninput" placeholder="Código o descripción" />
+            </label>
+            <label class="campo" style="min-width:120px">Ajuste %
+                <input type="number" step="0.5" class="num" @bind="porcentaje" />
+            </label>
+            <button class="btn sec" @onclick="Ajustar">Aplicar a @(categoria == "" ? "todas" : categoria)</button>
+        </div>
+        <p class="muted">Los cambios se guardan al salir de cada casilla. Las cotizaciones ya guardadas conservan su precio.</p>
+        <div class="scroll">
+            <table class="tabla">
+                <thead><tr><th>Categoría</th><th>Código</th><th>Descripción</th><th class="num">Precio MXN</th><th class="num">Precio USD</th></tr></thead>
+                <tbody>
+                    @foreach (var p in Filtrados)
+                    {
+                        var pr = p;
+                        <tr @key="pr.Id" style="@(pr.Activo ? "" : "opacity:.5")">
+                            <td><span class="chip">@pr.Categoria</span></td>
+                            <td>@pr.Codigo</td>
+                            <td>@pr.Descripcion</td>
+                            <td style="width:140px"><input type="number" step="0.01" class="num" @bind="pr.PrecioMxn" @bind:after="() => GuardarProducto(pr)" /></td>
+                            <td style="width:130px"><input type="number" step="0.01" class="num" @bind="pr.PrecioUsd" @bind:after="() => GuardarProducto(pr)" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private string categoria = "";
+    private string buscar = "";
+    private decimal porcentaje;
+    private string? mensaje;
+    private bool mensajeOk;
+
+    private IEnumerable<ProductoDb> Filtrados => Cat.Productos
+        .Where(p => (categoria == "" || p.Categoria == categoria) &&
+                    (buscar == "" || $"{p.Codigo} {p.Descripcion}".Contains(buscar, StringComparison.OrdinalIgnoreCase)))
+        .OrderBy(p => Array.IndexOf(Categorias.Catalogo, p.Categoria)).ThenBy(p => p.Orden);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { await Cat.Cargar(true); }
+        catch (Exception ex) { Error(ex); }
+    }
+
+    private void Ok(string m) { mensaje = m; mensajeOk = true; }
+    private void Error(Exception ex) { mensaje = "No se pudo guardar: " + ex.Message; mensajeOk = false; }
+
+    private async Task GuardarTarifa(TarifaDb t)
+    {
+        try { await Cat.GuardarTarifa(t); Ok("Rango guardado."); }
+        catch (Exception ex) { Error(ex); }
+    }
+
+    private async Task AgregarTarifa()
+    {
+        var ultimo = Cat.Tarifas.LastOrDefault();
+        await GuardarTarifa(new TarifaDb
+        {
+            AnchoHasta = (ultimo?.AnchoHasta ?? 0.5m) + 0.3m,
+            AltoHasta = ultimo?.AltoHasta ?? 2.4m,
+            PrecioMxn = ultimo?.PrecioMxn ?? 0,
+            PrecioUsd = ultimo?.PrecioUsd ?? 0,
+        });
+    }
+
+    private async Task BorrarTarifa(TarifaDb t)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "¿Borrar este rango de precios?")) return;
+        try { await Cat.BorrarTarifa(t); Ok("Rango borrado."); }
+        catch (Exception ex) { Error(ex); }
+    }
+
+    private async Task GuardarProducto(ProductoDb p)
+    {
+        try { await Cat.GuardarProducto(p); Ok($"Precio de {p.Codigo} guardado."); }
+        catch (Exception ex) { Error(ex); }
+    }
+
+    private async Task Ajustar()
+    {
+        if (porcentaje == 0) { mensaje = "Escribe un porcentaje, por ejemplo 5 para subir 5% o -3 para bajar 3%."; mensajeOk = false; return; }
+        var cual = categoria == "" ? "TODOS los insumos" : $"la categoría {categoria}";
+        if (!await JS.InvokeAsync<bool>("confirm", $"¿Cambiar {porcentaje}% los precios de {cual} (pesos y dólares)?")) return;
+        try
+        {
+            await Cat.AjustarPrecios(categoria == "" ? null : categoria, 1 + porcentaje / 100m);
+            Ok($"Precios de {cual} ajustados {porcentaje}%.");
+            porcentaje = 0;
+        }
+        catch (Exception ex) { Error(ex); }
+    }
+}

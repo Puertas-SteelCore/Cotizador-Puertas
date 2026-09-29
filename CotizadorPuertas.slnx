@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CotizadorPuertas.Core/CotizadorPuertas.Core.csproj" />
+    <Project Path="src/CotizadorPuertas.Web/CotizadorPuertas.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CotizadorPuertas.Tests/CotizadorPuertas.Tests.csproj" />
+  </Folder>
+</Solution>

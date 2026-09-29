@@ -1,0 +1,629 @@
+@page "/"
+@page "/cotizar/{Id}"
+@inject CatalogoService Cat
+@inject CotizacionService Cots
+@inject DocumentoService Docs
+@inject Armador Arm
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+@if (cargando)
+{
+    <p class="muted">Cargando…</p>
+}
+else if (errorCarga is not null)
+{
+    <div class="aviso error">@errorCarga</div>
+}
+else
+{
+    <div class="tarjeta" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+        <div>
+            <h1 style="margin:0">@(cot.Folio > 0 ? $"Presupuesto {cot.Numero}" : "Nueva cotización")</h1>
+            @if (cot.Folio > 0)
+            {
+                <span class="muted">Cotizó: @cot.Vendedor</span>
+            }
+        </div>
+        <div class="acciones" style="margin-left:auto">
+            <button class="btn gris" @onclick="Nueva">Nueva</button>
+            @if (cot.Folio > 0)
+            {
+                <button class="btn gris" @onclick="Duplicar">Duplicar</button>
+            }
+            <button class="btn sec" @onclick="Guardar" disabled="@ocupado">Guardar</button>
+            <button class="btn" @onclick="Pdf" disabled="@ocupado">Descargar PDF</button>
+            <button class="btn" @onclick="Excel" disabled="@ocupado">Descargar Excel</button>
+        </div>
+    </div>
+
+    @if (mensaje is not null)
+    {
+        <div class="aviso @(mensajeOk ? "ok" : "error")">@mensaje</div>
+    }
+    @if (nota is not null)
+    {
+        <div class="aviso nota">@nota</div>
+    }
+
+    <div class="tarjeta">
+        <h2>Datos del proyecto</h2>
+        <div class="campos">
+            <label class="campo">Fecha
+                <input type="date" @bind="cot.Fecha" @bind:format="yyyy-MM-dd" />
+            </label>
+            <label class="campo ancho2">Obra / proyecto
+                <input @bind="cot.Obra" placeholder="Nombre de la obra" />
+            </label>
+            <label class="campo">Contacto
+                <input @bind="cot.Contacto" placeholder="Nombre del cliente" />
+            </label>
+            <label class="campo">Ubicación
+                <input @bind="cot.Ubicacion" placeholder="Ciudad / estado" />
+            </label>
+            <label class="campo">Moneda
+                <select value="@cot.Moneda" @onchange="CambiarMoneda">
+                    <option value="MXN">Pesos (MXN)</option>
+                    <option value="USD">Dólares (USD)</option>
+                </select>
+            </label>
+            <label class="campo">Estado
+                <select @bind="cot.Estado">
+                    @foreach (var e in CotizacionService.Estados)
+                    {
+                        <option value="@e">@e</option>
+                    }
+                </select>
+            </label>
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <h2>Especificaciones</h2>
+        <div class="campos">
+            <label class="campo">Marca
+                <select @bind="cot.Marca"><option value="MODUMEX">MODUMEX</option></select>
+            </label>
+            <label class="campo">Distribuidor
+                <select @bind="cot.Distribuidor"><option value="SANIMAX">SANIMAX</option></select>
+            </label>
+            <label class="campo">Línea
+                <select @bind="cot.Linea"><option value="SteelCore">SteelCore</option></select>
+            </label>
+            <label class="campo">Acabado
+                <input value="@cot.Acabado" readonly />
+            </label>
+            <label class="campo">Color
+                <select value="@colorSel" @onchange="ElegirColor">
+                    <option value="">Elige un color…</option>
+                    @foreach (var grupo in Cat.Colores.Where(c => c.Activo).GroupBy(c => c.Tipo))
+                    {
+                        <optgroup label="@(grupo.Key == "Línea" ? "Colores de línea" : "Especiales")">
+                            @foreach (var c in grupo)
+                            {
+                                <option value="@c.Nombre">@c.Nombre</option>
+                            }
+                        </optgroup>
+                    }
+                    <option value="@OTRO">Otro (escribir)…</option>
+                </select>
+            </label>
+            @if (colorSel == OTRO)
+            {
+                <label class="campo">Color especial
+                    <input @bind="cot.Color" placeholder="Ej. 920-42 FORMICA" />
+                </label>
+            }
+            <label class="campo">Color de marco
+                <select value="@cot.ColorMarco" @onchange="CambiarMarco">
+                    @foreach (var c in CatalogoService.ColoresAluminio)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </label>
+            <label class="campo">Color de perfil
+                <select value="@cot.ColorPerfil" @onchange="CambiarPerfil">
+                    @foreach (var c in CatalogoService.ColoresAluminio)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </label>
+        </div>
+    </div>
+
+    <div class="tarjeta" style="background:transparent;border:0;padding:0">
+        <h2>
+            Puertas <span class="chip">@totales.PuertasTotales en total</span>
+            <span class="der">
+                <button class="btn chico" @onclick="() => Agregar(TiposPuerta.Sencilla)">+ Puerta sencilla</button>
+                <button class="btn chico" @onclick="() => Agregar(TiposPuerta.Doble)">+ Puerta doble</button>
+            </span>
+        </h2>
+
+        @if (cot.Partidas.Count == 0)
+        {
+            <div class="tarjeta vacio">Agrega una puerta sencilla o doble para empezar.</div>
+        }
+
+        @foreach (var p in cot.Partidas)
+        {
+            var partida = p;
+            <div class="partida" @key="partida">
+                <div class="partida-top">
+                    <label class="campo">Clave
+                        <input @bind="partida.Clave" />
+                    </label>
+                    <label class="campo">Ubicación / área
+                        <input @bind="partida.Ubicacion" placeholder="Ej. Baño hombres" />
+                    </label>
+                    <label class="campo">Tipo
+                        <select value="@partida.Tipo" @onchange="e => CambiarTipo(partida, e.Value?.ToString())">
+                            <option value="@TiposPuerta.Sencilla">Sencilla</option>
+                            <option value="@TiposPuerta.Doble">Doble</option>
+                        </select>
+                    </label>
+                    <label class="campo">Cantidad de puertas
+                        <input type="number" min="1" step="1" class="num" @bind="partida.Cantidad" />
+                    </label>
+                    <label class="campo">Vano ancho (m)
+                        <input type="number" min="0" step="0.01" class="num" @bind="partida.VanoAncho" @bind:after="() => Recalc(partida)" />
+                    </label>
+                    <label class="campo">Vano alto (m)
+                        <input type="number" min="0" step="0.01" class="num" @bind="partida.VanoAlto" @bind:after="() => Recalc(partida)" />
+                    </label>
+                    <div class="acciones">
+                        <button class="btn gris chico" title="Duplicar" @onclick="() => DuplicarPartida(partida)">Duplicar</button>
+                        <button class="btn peligro chico" title="Quitar" @onclick="() => cot.Partidas.Remove(partida)">Quitar</button>
+                    </div>
+                </div>
+                <div class="partida-medida">
+                    <span>Medida de puerta por hoja: <b>@Fmt.M(partida.HojaAncho) × @Fmt.M(partida.HojaAlto) m</b> @(partida.Hojas == 2 ? "(2 hojas)" : "")</span>
+                    @if (Arm.FueraDeTabla(partida))
+                    {
+                        <span style="color:var(--error)">La medida no entra en la tabla de precios: escribe el precio de la puerta a mano.</span>
+                    }
+                </div>
+
+                <div class="scroll">
+                    <table class="tabla insumos">
+                        <thead>
+                            <tr>
+                                <th>Insumo</th>
+                                <th>Producto</th>
+                                <th class="num">Cantidad</th>
+                                <th class="num">Precio unitario</th>
+                                <th class="num">Total</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var i in partida.Insumos)
+                            {
+                                var ins = i;
+                                <tr @key="ins">
+                                    <td class="cat">
+                                        @if (ins.Categoria is Categorias.Puerta or Categorias.Antepecho)
+                                        {
+                                            <span class="chip">@ins.Categoria</span>
+                                        }
+                                        else
+                                        {
+                                            <select value="@ins.Categoria" @onchange="e => CambiarCategoria(partida, ins, e.Value?.ToString())">
+                                                @foreach (var c in Categorias.Catalogo)
+                                                {
+                                                    <option value="@c">@c</option>
+                                                }
+                                                <option value="@Categorias.Otro">Otro</option>
+                                            </select>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (Categorias.Catalogo.Contains(ins.Categoria))
+                                        {
+                                            <select value="@(ins.ProductoId?.ToString() ?? "")" @onchange="e => ElegirProducto(ins, e.Value?.ToString())">
+                                                @if (ins.ProductoId is null)
+                                                {
+                                                    <option value="">Elige…</option>
+                                                }
+                                                @foreach (var pr in Cat.DeCategoria(ins.Categoria))
+                                                {
+                                                    <option value="@pr.Id">@pr.Descripcion</option>
+                                                }
+                                            </select>
+                                        }
+                                        else
+                                        {
+                                            <input @bind="ins.Descripcion" placeholder="Descripción" />
+                                        }
+                                    </td>
+                                    <td class="cant"><input type="number" min="0" step="0.5" class="num" @bind="ins.Cantidad" /></td>
+                                    <td class="precio">
+                                        <input type="number" min="0" step="0.01" class="num" @bind="ins.PrecioUnitario" @bind:after="() => ins.PrecioManual = true" />
+                                        @if (ins.PrecioManual && ins.Categoria != Categorias.Otro)
+                                        {
+                                            <button class="manual" title="Volver al precio de lista" @onclick="() => { ins.PrecioManual = false; Recalc(partida); }">precio a mano ↺</button>
+                                        }
+                                    </td>
+                                    <td class="num total">@Fmt.Dinero(ins.Total)</td>
+                                    <td><button class="x" title="Quitar" @onclick="() => partida.Insumos.Remove(ins)">×</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="partida-pie">
+                    <div class="acciones">
+                        <button class="btn gris chico" @onclick="() => AgregarInsumo(partida, Categorias.Ventanilla)">+ Ventanilla</button>
+                        <button class="btn gris chico" @onclick="() => AgregarInsumo(partida, Categorias.Rejilla)">+ Rejilla</button>
+                        <button class="btn gris chico" @onclick="() => AgregarInsumo(partida, Categorias.Herraje)">+ Otro insumo</button>
+                        @if (!partida.Insumos.Any(x => x.Categoria == Categorias.Antepecho) && partida.Tipo == TiposPuerta.Sencilla)
+                        {
+                            <button class="btn gris chico" @onclick="() => AgregarAntepecho(partida)">+ Antepecho</button>
+                        }
+                    </div>
+                    <div class="monto">
+                        Precio unitario <b>@Fmt.Dinero(partida.PrecioUnitario)</b>
+                        &nbsp;× @partida.Cantidad =&nbsp;<b>@Fmt.Dinero(partida.Total)</b>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="resumen">
+        <div>
+            <div class="tarjeta">
+                <h2>Cargos adicionales</h2>
+                <p class="muted" style="margin-top:0">Solo salen en la cotización si tienen un monto.</p>
+                <div class="campos">
+                    <label class="campo">Instalación
+                        <input type="number" min="0" step="0.01" class="num" @bind="cot.Instalacion" />
+                    </label>
+                    <label class="campo">Flete
+                        <input type="number" min="0" step="0.01" class="num" @bind="cot.Flete" />
+                    </label>
+                    <label class="campo">Viáticos
+                        <input type="number" min="0" step="0.01" class="num" @bind="cot.Viaticos" />
+                    </label>
+                </div>
+
+                @if (cot.Extras.Count > 0)
+                {
+                    <h2 style="margin-top:1rem">Extras</h2>
+                    @foreach (var e in cot.Extras)
+                    {
+                        var ex = e;
+                        <div class="linea-cargo" @key="ex">
+                            <input @bind="ex.Nombre" placeholder="Concepto del costo extra" />
+                            <input type="number" step="0.01" class="num" @bind="ex.Monto" placeholder="Monto" />
+                            <button class="x" @onclick="() => cot.Extras.Remove(ex)">×</button>
+                        </div>
+                    }
+                }
+                @if (cot.Descuentos.Count > 0)
+                {
+                    <h2 style="margin-top:1rem">Descuentos</h2>
+                    @foreach (var d in cot.Descuentos)
+                    {
+                        var de = d;
+                        <div class="linea-desc" @key="de">
+                            <input @bind="de.Nombre" placeholder="Nombre del descuento" />
+                            <input type="number" min="0" max="100" step="0.5" class="num" @bind="de.Porcentaje" title="Porcentaje sobre el material" />
+                            <button class="x" @onclick="() => cot.Descuentos.Remove(de)">×</button>
+                        </div>
+                    }
+                    <p class="muted" style="margin:0">El porcentaje se aplica sobre el material.</p>
+                }
+                <div class="acciones" style="margin-top:.8rem">
+                    <button class="btn gris chico" @onclick="AgregarExtra">+ Extra</button>
+                    <button class="btn gris chico" @onclick="AgregarDescuento">+ Descuento</button>
+                </div>
+            </div>
+
+            <div class="tarjeta">
+                <h2>Condiciones</h2>
+                <div class="campos" style="grid-template-columns:1fr">
+                    <label class="campo">Especificación
+                        <textarea rows="3" @bind="cot.Especificacion"></textarea>
+                    </label>
+                    <label class="campo">Tiempo de entrega
+                        <textarea rows="3" @bind="cot.TiempoEntrega"></textarea>
+                    </label>
+                    <label class="campo">Observaciones
+                        <textarea rows="4" @bind="cot.Observaciones"></textarea>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="tarjeta" style="position:sticky;top:1rem">
+            <h2>Resumen <span class="chip">@cot.Moneda</span></h2>
+            <table class="totales">
+                <tr><td>Puertas totales</td><td>@totales.PuertasTotales</td></tr>
+                <tr class="sep"><td>Material</td><td>@Fmt.Dinero(totales.Material)</td></tr>
+                @foreach (var d in totales.Descuentos)
+                {
+                    <tr class="menos"><td>@d.Nombre @Fmt.Num(d.Porcentaje)%</td><td>- @Fmt.Dinero(d.Monto)</td></tr>
+                }
+                @if (totales.Instalacion != 0)
+                {
+                    <tr><td>Instalación</td><td>@Fmt.Dinero(totales.Instalacion)</td></tr>
+                }
+                @if (totales.Flete != 0)
+                {
+                    <tr><td>Flete</td><td>@Fmt.Dinero(totales.Flete)</td></tr>
+                }
+                @if (totales.Viaticos != 0)
+                {
+                    <tr><td>Viáticos</td><td>@Fmt.Dinero(totales.Viaticos)</td></tr>
+                }
+                @foreach (var e in cot.Extras.Where(x => x.Monto != 0))
+                {
+                    <tr><td>@(string.IsNullOrWhiteSpace(e.Nombre) ? "Extra" : e.Nombre)</td><td>@Fmt.Dinero(e.Monto)</td></tr>
+                }
+                <tr class="sep"><td>Subtotal</td><td>@Fmt.Dinero(totales.Subtotal)</td></tr>
+                <tr><td>IVA @Fmt.Pct(cot.IvaPct)</td><td>@Fmt.Dinero(totales.Iva)</td></tr>
+                <tr class="gran"><td>Total</td><td>@Fmt.Dinero(totales.Total)</td></tr>
+            </table>
+            <div class="pagos">
+                <div>Anticipo @Fmt.Pct(cot.AnticipoPct)<b>@Fmt.Dinero(totales.Anticipo)</b>para iniciar fabricación</div>
+                <div>Saldo @Fmt.Pct(1 - cot.AnticipoPct)<b>@Fmt.Dinero(totales.Saldo)</b>sobre aviso de embarque</div>
+            </div>
+            <div class="acciones" style="margin-top:1rem">
+                <button class="btn sec" @onclick="Guardar" disabled="@ocupado">Guardar</button>
+                <button class="btn" @onclick="Pdf" disabled="@ocupado">PDF</button>
+                <button class="btn" @onclick="Excel" disabled="@ocupado">Excel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [SupplyParameterFromQuery(Name = "copiar")] public string? Copiar { get; set; }
+
+    private const string OTRO = "__otro";
+    private CotizacionDb cot = new();
+    private bool cargando = true;
+    private bool ocupado;
+    private string? errorCarga;
+    private string? mensaje;
+    private bool mensajeOk;
+    private string? nota;
+    private string colorSel = "";
+    private string? idCargado;
+
+    private Totales totales => Motor.Calcular(cot.Datos());
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var clave = (Id ?? "") + "|" + (Copiar ?? "");
+        if (clave == idCargado) return;
+        idCargado = clave;
+        cargando = true;
+        errorCarga = mensaje = nota = null;
+        try
+        {
+            await Cat.Cargar();
+            if (!string.IsNullOrEmpty(Id))
+            {
+                cot = await Cots.Obtener(Id) ?? throw new Exception("No se encontró la cotización o no tienes acceso a ella.");
+            }
+            else if (!string.IsNullOrEmpty(Copiar))
+            {
+                var origen = await Cots.Obtener(Copiar);
+                cot = origen is null ? NuevaCot() : CotizacionService.Copia(origen);
+                if (origen is not null) nota = $"Copia de {origen.Numero}. Se guardará como una cotización nueva.";
+            }
+            else
+            {
+                cot = NuevaCot();
+            }
+            SincronizarColor();
+        }
+        catch (Exception ex)
+        {
+            errorCarga = ex.Message;
+        }
+        cargando = false;
+    }
+
+    private CotizacionDb NuevaCot() => new()
+    {
+        Fecha = DateTime.Today,
+        IvaPct = Cat.AjusteNum("iva", 0.16m),
+        AnticipoPct = Cat.AjusteNum("anticipo", 0.60m),
+        Especificacion = DocumentoService.Especificacion(Cat.Ajuste("especificacion"), "Aluminio"),
+        TiempoEntrega = Cat.Ajuste("tiempo_entrega"),
+        Observaciones = Cat.Ajuste("observaciones"),
+    };
+
+    private void SincronizarColor()
+    {
+        if (string.IsNullOrWhiteSpace(cot.Color)) colorSel = "";
+        else if (Cat.Colores.Any(c => c.Nombre == cot.Color)) colorSel = cot.Color;
+        else colorSel = OTRO;
+    }
+
+    private void ElegirColor(ChangeEventArgs e)
+    {
+        colorSel = e.Value?.ToString() ?? "";
+        cot.Color = colorSel == OTRO ? "" : colorSel;
+    }
+
+    private string SiguienteClave() => $"P-{cot.Partidas.Count + 1:00}";
+
+    private void Agregar(string tipo)
+    {
+        cot.Partidas.Add(Arm.Nueva(tipo, SiguienteClave(), cot.Moneda, cot.ColorMarco));
+    }
+
+    private void DuplicarPartida(Partida p)
+    {
+        var json = Newtonsoft.Json.JsonConvert.SerializeObject(p);
+        var copia = Newtonsoft.Json.JsonConvert.DeserializeObject<Partida>(json)!;
+        copia.Clave = SiguienteClave();
+        cot.Partidas.Insert(cot.Partidas.IndexOf(p) + 1, copia);
+    }
+
+    private void CambiarTipo(Partida p, string? tipo)
+    {
+        if (tipo is null || tipo == p.Tipo) return;
+        var nueva = Arm.Nueva(tipo, p.Clave, cot.Moneda, cot.ColorMarco);
+        nueva.Ubicacion = p.Ubicacion;
+        nueva.Cantidad = p.Cantidad;
+        nueva.VanoAlto = p.VanoAlto;
+        var idx = cot.Partidas.IndexOf(p);
+        cot.Partidas[idx] = nueva;
+        nota = $"La partida {p.Clave} cambió a puerta {tipo.ToLower()} y se armó de nuevo su explosión de insumos. Revisa el vano.";
+    }
+
+    private void Recalc(Partida p) => Arm.Recalcular(p, cot.Moneda);
+
+    private void AgregarInsumo(Partida p, string categoria)
+    {
+        p.Insumos.Add(Arm.DeProducto(categoria, p.Hojas, cot.Moneda));
+    }
+
+    private void AgregarAntepecho(Partida p)
+    {
+        var idx = p.Insumos.FindIndex(i => i.Categoria == Categorias.Marco);
+        p.Insumos.Insert(idx < 0 ? 1 : idx + 1, Arm.Especial(Categorias.Antepecho, 1));
+        Recalc(p);
+    }
+
+    private void CambiarCategoria(Partida p, Insumo i, string? categoria)
+    {
+        if (categoria is null) return;
+        i.Categoria = categoria;
+        if (categoria == Categorias.Otro)
+        {
+            i.ProductoId = null;
+            i.Codigo = "";
+            i.PrecioManual = true;
+            return;
+        }
+        var prod = Arm.Elegir(categoria, categoria == Categorias.Marco ? cot.ColorMarco : null);
+        if (prod is null)
+        {
+            i.ProductoId = null;
+            i.Descripcion = "";
+            i.PrecioUnitario = 0;
+        }
+        else Arm.Asignar(i, prod, cot.Moneda);
+    }
+
+    private void ElegirProducto(Insumo i, string? valor)
+    {
+        if (long.TryParse(valor, out var id) && Cat.Producto(id) is { } prod) Arm.Asignar(i, prod, cot.Moneda);
+    }
+
+    private void CambiarMoneda(ChangeEventArgs e)
+    {
+        var nueva = e.Value?.ToString() ?? Monedas.MXN;
+        if (nueva == cot.Moneda) return;
+        cot.Moneda = nueva;
+        foreach (var p in cot.Partidas) Arm.Recalcular(p, nueva);
+        var manuales = cot.Partidas.SelectMany(p => p.Insumos).Count(i => i.PrecioManual);
+        var hayCargos = cot.Instalacion + cot.Flete + cot.Viaticos + cot.Extras.Sum(x => x.Monto) != 0;
+        var partes = new List<string> { $"Los precios de lista se cambiaron a {nueva}." };
+        if (manuales > 0) partes.Add($"{manuales} precio(s) escritos a mano NO se convirtieron: revísalos.");
+        if (hayCargos) partes.Add("Revisa también instalación, flete, viáticos y extras.");
+        nota = string.Join(" ", partes);
+    }
+
+    private void CambiarMarco(ChangeEventArgs e)
+    {
+        cot.ColorMarco = e.Value?.ToString() ?? "Aluminio";
+        Arm.CambiarColorMarco(cot.Partidas, cot.ColorMarco, cot.Moneda);
+    }
+
+    private void CambiarPerfil(ChangeEventArgs e)
+    {
+        var antes = DocumentoService.Especificacion(Cat.Ajuste("especificacion"), cot.ColorPerfil);
+        cot.ColorPerfil = e.Value?.ToString() ?? "Aluminio";
+        if (string.IsNullOrWhiteSpace(cot.Especificacion) || cot.Especificacion == antes)
+            cot.Especificacion = DocumentoService.Especificacion(Cat.Ajuste("especificacion"), cot.ColorPerfil);
+    }
+
+    private void AgregarExtra() => cot.Extras.Add(new Cargo());
+    private void AgregarDescuento() => cot.Descuentos.Add(new Descuento { Nombre = "Descuento especial", Porcentaje = 10 });
+
+    private void Nueva()
+    {
+        if (string.IsNullOrEmpty(Id) && string.IsNullOrEmpty(Copiar))
+        {
+            cot = NuevaCot();
+            SincronizarColor();
+            mensaje = nota = null;
+        }
+        else Nav.NavigateTo("");
+    }
+
+    private void Duplicar() => Nav.NavigateTo($"?copiar={cot.Id}");
+
+    private string? Validar()
+    {
+        if (cot.Partidas.Count == 0) return "Agrega al menos una puerta.";
+        if (cot.Partidas.Any(p => p.Cantidad <= 0)) return "Hay partidas con cantidad de puertas en cero.";
+        var sinPrecio = cot.Partidas.Where(p => p.Insumos.Any(i => i.Categoria == Categorias.Puerta && i.PrecioUnitario <= 0)).Select(p => p.Clave).ToList();
+        if (sinPrecio.Count > 0) return $"La puerta de {string.Join(", ", sinPrecio)} no tiene precio. Escríbelo a mano.";
+        return null;
+    }
+
+    private async Task<bool> GuardarInterno()
+    {
+        mensaje = null;
+        var err = Validar();
+        if (err is not null) { mensaje = err; mensajeOk = false; return false; }
+        if (string.IsNullOrWhiteSpace(cot.Obra)) { mensaje = "Escribe el nombre de la obra."; mensajeOk = false; return false; }
+        ocupado = true;
+        try
+        {
+            var nueva = string.IsNullOrEmpty(cot.Id);
+            cot = await Cots.Guardar(cot);
+            SincronizarColor();
+            if (nueva)
+            {
+                idCargado = cot.Id + "|";
+                Nav.NavigateTo($"cotizar/{cot.Id}", replace: true);
+            }
+            nota = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            mensaje = "No se pudo guardar: " + ex.Message;
+            mensajeOk = false;
+            return false;
+        }
+        finally { ocupado = false; }
+    }
+
+    private async Task Guardar()
+    {
+        if (await GuardarInterno()) { mensaje = $"Guardada como {cot.Numero}."; mensajeOk = true; }
+    }
+
+    private async Task Pdf()
+    {
+        if (!await GuardarInterno()) return;
+        ocupado = true;
+        var err = await Docs.Pdf(cot);
+        ocupado = false;
+        mensaje = err ?? $"Guardada como {cot.Numero} y PDF descargado.";
+        mensajeOk = err is null;
+    }
+
+    private async Task Excel()
+    {
+        if (!await GuardarInterno()) return;
+        ocupado = true;
+        var err = await Docs.Excel(cot);
+        ocupado = false;
+        mensaje = err ?? $"Guardada como {cot.Numero} y Excel descargado.";
+        mensajeOk = err is null;
+    }
+}

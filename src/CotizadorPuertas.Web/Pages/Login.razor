@@ -1,0 +1,39 @@
+@inject AuthService Auth
+
+<div class="login">
+    <div class="login-caja">
+        <div class="logos">
+            <img src="img/puertas-modumex.png" alt="Puertas Modumex" />
+        </div>
+        <h1>Cotizador de Puertas SteelCore</h1>
+        <p class="sub">Ingresa con tu correo y contraseña</p>
+        <form @onsubmit="Entrar" @onsubmit:preventDefault>
+            <label class="campo">Correo
+                <input type="email" @bind="email" autocomplete="username" required />
+            </label>
+            <label class="campo">Contraseña
+                <input type="password" @bind="clave" autocomplete="current-password" required />
+            </label>
+            @if (error is not null)
+            {
+                <div class="aviso error">@error</div>
+            }
+            <button class="btn" type="submit" disabled="@cargando">@(cargando ? "Entrando…" : "Entrar")</button>
+        </form>
+    </div>
+</div>
+
+@code {
+    private string email = "";
+    private string clave = "";
+    private string? error;
+    private bool cargando;
+
+    private async Task Entrar()
+    {
+        cargando = true;
+        error = null;
+        error = await Auth.IniciarSesion(email, clave);
+        cargando = false;
+    }
+}

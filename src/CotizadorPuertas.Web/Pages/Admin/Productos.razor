@@ -1,0 +1,238 @@
+@page "/admin/productos"
+@inject CatalogoService Cat
+@inject AuthService Auth
+@inject IJSRuntime JS
+
+<h1>Productos y colores</h1>
+
+@if (!Auth.EsAdmin)
+{
+    <div class="aviso error">Solo el administrador puede agregar productos.</div>
+}
+else if (!Cat.Cargado)
+{
+    <p class="muted">Cargando…</p>
+}
+else
+{
+    @if (mensaje is not null)
+    {
+        <div class="aviso @(mensajeOk ? "ok" : "error")">@mensaje</div>
+    }
+
+    <div class="tarjeta">
+        <h2>@(edit.Id == 0 ? "Agregar producto" : $"Editar {edit.Codigo}")</h2>
+        <div class="campos">
+            <label class="campo">Categoría
+                <select @bind="edit.Categoria">
+                    @foreach (var c in Categorias.Catalogo)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </label>
+            <label class="campo">Código
+                <input @bind="edit.Codigo" />
+            </label>
+            <label class="campo ancho2">Descripción (así sale en la cotización)
+                <input @bind="edit.Descripcion" />
+            </label>
+            @if (edit.Categoria == Categorias.Marco)
+            {
+                <label class="campo">Color de marco
+                    <select @bind="edit.Color">
+                        <option value="">—</option>
+                        @foreach (var c in CatalogoService.ColoresAluminio)
+                        {
+                            <option value="@c">@c</option>
+                        }
+                    </select>
+                </label>
+            }
+            <label class="campo">Precio MXN
+                <input type="number" step="0.01" class="num" @bind="edit.PrecioMxn" />
+            </label>
+            <label class="campo">Precio USD
+                <input type="number" step="0.01" class="num" @bind="edit.PrecioUsd" />
+            </label>
+            <label class="campo">Orden en la lista
+                <input type="number" step="1" class="num" @bind="edit.Orden" />
+            </label>
+            <label class="campo">Activo
+                <select @bind="edit.Activo">
+                    <option value="true">Sí</option>
+                    <option value="false">No (no aparece al cotizar)</option>
+                </select>
+            </label>
+        </div>
+        <div class="acciones" style="margin-top:.8rem">
+            <button class="btn" @onclick="Guardar">@(edit.Id == 0 ? "Agregar" : "Guardar cambios")</button>
+            @if (edit.Id != 0)
+            {
+                <button class="btn gris" @onclick="Limpiar">Cancelar</button>
+            }
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <h2>Catálogo de insumos</h2>
+        <div class="filtros">
+            <label class="campo">Categoría
+                <select @bind="categoria">
+                    <option value="">Todas</option>
+                    @foreach (var c in Categorias.Catalogo)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </label>
+            <label class="campo" style="flex:1;min-width:220px">Buscar
+                <input @bind="buscar" @bind:event="oninput" placeholder="Código o descripción" />
+            </label>
+        </div>
+        <div class="scroll">
+            <table class="tabla">
+                <thead><tr><th>Categoría</th><th>Código</th><th>Descripción</th><th class="num">MXN</th><th class="num">USD</th><th>Activo</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var p in Filtrados)
+                    {
+                        var pr = p;
+                        <tr @key="pr.Id" style="@(pr.Activo ? "" : "opacity:.55")">
+                            <td><span class="chip">@pr.Categoria</span></td>
+                            <td>@pr.Codigo</td>
+                            <td>@pr.Descripcion @(pr.Color is { Length: > 0 } ? $"({pr.Color})" : "")</td>
+                            <td class="num">@Fmt.Dinero(pr.PrecioMxn)</td>
+                            <td class="num">@Fmt.Dinero(pr.PrecioUsd)</td>
+                            <td>@(pr.Activo ? "Sí" : "No")</td>
+                            <td>
+                                <div class="acciones" style="flex-wrap:nowrap">
+                                    <button class="btn gris chico" @onclick="() => Editar(pr)">Editar</button>
+                                    <button class="btn peligro chico" @onclick="() => Borrar(pr)">Borrar</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <h2>Colores de puerta</h2>
+        <div class="filtros">
+            <label class="campo" style="flex:1;min-width:220px">Nombre del color
+                <input @bind="nuevoColor" placeholder="Ej. NOGAL" />
+            </label>
+            <label class="campo">Tipo
+                <select @bind="tipoColor">
+                    <option value="Línea">De línea</option>
+                    <option value="Especial">Especial</option>
+                </select>
+            </label>
+            <button class="btn" @onclick="AgregarColor">+ Agregar color</button>
+        </div>
+        <table class="tabla" style="max-width:640px">
+            <thead><tr><th>Color</th><th>Tipo</th><th>Activo</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var c in Cat.Colores)
+                {
+                    var co = c;
+                    <tr @key="co.Id">
+                        <td>@co.Nombre</td>
+                        <td>
+                            <select @bind="co.Tipo" @bind:after="() => GuardarColor(co)">
+                                <option value="Línea">De línea</option>
+                                <option value="Especial">Especial</option>
+                            </select>
+                        </td>
+                        <td><input type="checkbox" style="width:auto" @bind="co.Activo" @bind:after="() => GuardarColor(co)" /></td>
+                        <td><button class="x" title="Borrar" @onclick="() => BorrarColor(co)">×</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private ProductoDb edit = new();
+    private string categoria = "";
+    private string buscar = "";
+    private string nuevoColor = "";
+    private string tipoColor = "Línea";
+    private string? mensaje;
+    private bool mensajeOk;
+
+    private IEnumerable<ProductoDb> Filtrados => Cat.Productos
+        .Where(p => (categoria == "" || p.Categoria == categoria) &&
+                    (buscar == "" || $"{p.Codigo} {p.Descripcion}".Contains(buscar, StringComparison.OrdinalIgnoreCase)))
+        .OrderBy(p => Array.IndexOf(Categorias.Catalogo, p.Categoria)).ThenBy(p => p.Orden);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { await Cat.Cargar(true); }
+        catch (Exception ex) { mensaje = ex.Message; }
+    }
+
+    private void Limpiar() => edit = new ProductoDb { Categoria = categoria == "" ? Categorias.Herraje : categoria };
+
+    private void Editar(ProductoDb p)
+    {
+        edit = new ProductoDb
+        {
+            Id = p.Id, Categoria = p.Categoria, Codigo = p.Codigo, Descripcion = p.Descripcion, Color = p.Color,
+            PrecioMxn = p.PrecioMxn, PrecioUsd = p.PrecioUsd, Orden = p.Orden, Activo = p.Activo,
+        };
+    }
+
+    private async Task Guardar()
+    {
+        if (string.IsNullOrWhiteSpace(edit.Descripcion)) { mensaje = "Escribe la descripción."; mensajeOk = false; return; }
+        edit.Descripcion = edit.Descripcion.Trim().ToUpperInvariant();
+        edit.Codigo = edit.Codigo.Trim();
+        if (edit.Categoria != Categorias.Marco || string.IsNullOrEmpty(edit.Color)) edit.Color = null;
+        if (edit.Id == 0 && edit.Orden == 0)
+            edit.Orden = Cat.Productos.Where(p => p.Categoria == edit.Categoria).Select(p => p.Orden).DefaultIfEmpty(0).Max() + 1;
+        try
+        {
+            var nuevo = edit.Id == 0;
+            await Cat.GuardarProducto(edit);
+            mensaje = nuevo ? $"Se agregó {edit.Descripcion}." : "Cambios guardados.";
+            mensajeOk = true;
+            Limpiar();
+        }
+        catch (Exception ex) { mensaje = "No se pudo guardar: " + ex.Message; mensajeOk = false; }
+    }
+
+    private async Task Borrar(ProductoDb p)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"¿Borrar {p.Descripcion}? Las cotizaciones ya guardadas no cambian. Si solo quieres ocultarlo, márcalo como inactivo.")) return;
+        try { await Cat.BorrarProducto(p); mensaje = "Producto borrado."; mensajeOk = true; }
+        catch (Exception ex) { mensaje = "No se pudo borrar: " + ex.Message; mensajeOk = false; }
+    }
+
+    private async Task AgregarColor()
+    {
+        if (string.IsNullOrWhiteSpace(nuevoColor)) return;
+        try
+        {
+            await Cat.GuardarColor(new ColorDb { Nombre = nuevoColor, Tipo = tipoColor, Orden = Cat.Colores.Count + 1 });
+            mensaje = "Color agregado."; mensajeOk = true;
+            nuevoColor = "";
+        }
+        catch (Exception ex) { mensaje = "No se pudo agregar (¿ya existe?): " + ex.Message; mensajeOk = false; }
+    }
+
+    private async Task GuardarColor(ColorDb c)
+    {
+        try { await Cat.GuardarColor(c); }
+        catch (Exception ex) { mensaje = ex.Message; mensajeOk = false; }
+    }
+
+    private async Task BorrarColor(ColorDb c)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"¿Borrar el color {c.Nombre}?")) return;
+        try { await Cat.BorrarColor(c); }
+        catch (Exception ex) { mensaje = ex.Message; mensajeOk = false; }
+    }
+}

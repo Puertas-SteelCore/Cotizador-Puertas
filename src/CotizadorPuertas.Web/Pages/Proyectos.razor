@@ -1,0 +1,203 @@
+@page "/proyectos"
+@inject CotizacionService Cots
+@inject DocumentoService Docs
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<h1>@(Auth.EsAdmin ? "Proyectos" : "Mis proyectos")</h1>
+
+@if (mensaje is not null)
+{
+    <div class="aviso @(mensajeOk ? "ok" : "error")">@mensaje</div>
+}
+
+<div class="tarjeta">
+    <div class="filtros">
+        <label class="campo" style="flex:1;min-width:220px">Buscar
+            <input @bind="buscar" @bind:event="oninput" placeholder="Folio, obra o contacto" />
+        </label>
+        <label class="campo">Estado
+            <select @bind="estado">
+                <option value="">Todos</option>
+                @foreach (var e in CotizacionService.Estados)
+                {
+                    <option value="@e">@e</option>
+                }
+            </select>
+        </label>
+        <label class="campo">Moneda
+            <select @bind="moneda">
+                <option value="">Todas</option>
+                <option value="MXN">MXN</option>
+                <option value="USD">USD</option>
+            </select>
+        </label>
+        @if (Auth.EsAdmin)
+        {
+            <label class="campo">Vendedor
+                <select @bind="vendedor">
+                    <option value="">Todos</option>
+                    @foreach (var v in lista.Select(c => c.Vendedor).Where(v => v != "").Distinct().OrderBy(v => v))
+                    {
+                        <option value="@v">@v</option>
+                    }
+                </select>
+            </label>
+        }
+        <label class="campo">Desde
+            <input type="date" @bind="desde" @bind:format="yyyy-MM-dd" />
+        </label>
+        <label class="campo">Hasta
+            <input type="date" @bind="hasta" @bind:format="yyyy-MM-dd" />
+        </label>
+    </div>
+
+    @if (cargando)
+    {
+        <p class="muted">Cargando…</p>
+    }
+    else if (!Filtradas.Any())
+    {
+        <div class="vacio">No hay cotizaciones con esos filtros.</div>
+    }
+    else
+    {
+        <div class="scroll">
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th>Folio</th>
+                        <th>Fecha</th>
+                        <th>Obra</th>
+                        <th>Contacto</th>
+                        @if (Auth.EsAdmin) { <th>Vendedor</th> }
+                        <th class="num">Puertas</th>
+                        <th class="num">Total</th>
+                        <th>Estado</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in Filtradas)
+                    {
+                        var cot = c;
+                        <tr @key="cot.Id">
+                            <td><a href="cotizar/@cot.Id"><b>@cot.Numero</b></a></td>
+                            <td>@cot.Fecha.ToString("dd/MM/yyyy")</td>
+                            <td>@cot.Obra</td>
+                            <td>@cot.Contacto</td>
+                            @if (Auth.EsAdmin) { <td>@cot.Vendedor</td> }
+                            <td class="num">@cot.Puertas</td>
+                            <td class="num">@Fmt.Dinero(cot.Total) <span class="muted">@cot.Moneda</span></td>
+                            <td>
+                                <select class="estado @Fmt.ClaseEstado(cot.Estado)" value="@cot.Estado" @onchange="e => CambiarEstado(cot, e.Value?.ToString())" style="border:0;width:auto">
+                                    @foreach (var e in CotizacionService.Estados)
+                                    {
+                                        <option value="@e">@e</option>
+                                    }
+                                </select>
+                            </td>
+                            <td>
+                                <div class="acciones" style="flex-wrap:nowrap">
+                                    <button class="btn gris chico" @onclick="() => Nav.NavigateTo(cotizar(cot))">Abrir</button>
+                                    <button class="btn gris chico" @onclick="() => Pdf(cot)">PDF</button>
+                                    <button class="btn gris chico" @onclick="() => Excel(cot)">Excel</button>
+                                    <button class="btn gris chico" @onclick="() => Nav.NavigateTo(duplicar(cot))">Duplicar</button>
+                                    @if (Auth.EsAdmin)
+                                    {
+                                        <button class="btn peligro chico" @onclick="() => Borrar(cot)">Borrar</button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="@(Auth.EsAdmin ? 5 : 4)"><b>@Filtradas.Count() cotizaciones</b></td>
+                        <td class="num"><b>@Filtradas.Sum(c => c.Puertas)</b></td>
+                        <td class="num">
+                            @foreach (var g in Filtradas.GroupBy(c => c.Moneda))
+                            {
+                                <div><b>@Fmt.Dinero(g.Sum(c => c.Total))</b> <span class="muted">@g.Key</span></div>
+                            }
+                        </td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<CotizacionDb> lista = new();
+    private bool cargando = true;
+    private string buscar = "";
+    private string estado = "";
+    private string moneda = "";
+    private string vendedor = "";
+    private DateTime? desde;
+    private DateTime? hasta;
+    private string? mensaje;
+    private bool mensajeOk;
+
+    private static string cotizar(CotizacionDb c) => $"cotizar/{c.Id}";
+    private static string duplicar(CotizacionDb c) => $"?copiar={c.Id}";
+
+    private IEnumerable<CotizacionDb> Filtradas => lista.Where(c =>
+        (estado == "" || c.Estado == estado) &&
+        (moneda == "" || c.Moneda == moneda) &&
+        (vendedor == "" || c.Vendedor == vendedor) &&
+        (desde is null || c.Fecha >= desde) &&
+        (hasta is null || c.Fecha <= hasta) &&
+        (buscar == "" || $"{c.Numero} {c.Folio} {c.Obra} {c.Contacto} {c.Ubicacion}".Contains(buscar, StringComparison.OrdinalIgnoreCase)));
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { lista = await Cots.Listar(); }
+        catch (Exception ex) { mensaje = "No se pudieron cargar las cotizaciones: " + ex.Message; }
+        cargando = false;
+    }
+
+    private async Task CambiarEstado(CotizacionDb c, string? nuevo)
+    {
+        if (nuevo is null || nuevo == c.Estado) return;
+        var motivo = "";
+        if (nuevo == "Perdida")
+            motivo = await JS.InvokeAsync<string?>("prompt", "¿Por qué se perdió? (opcional)", c.Motivo) ?? "";
+        try
+        {
+            await Cots.CambiarEstado(c, nuevo, motivo);
+            mensaje = $"{c.Numero} quedó como {nuevo}.";
+            mensajeOk = true;
+        }
+        catch (Exception ex) { mensaje = "No se pudo cambiar el estado: " + ex.Message; mensajeOk = false; }
+    }
+
+    private async Task Pdf(CotizacionDb c)
+    {
+        mensaje = await Docs.Pdf(c);
+        mensajeOk = false;
+    }
+
+    private async Task Excel(CotizacionDb c)
+    {
+        mensaje = await Docs.Excel(c);
+        mensajeOk = false;
+    }
+
+    private async Task Borrar(CotizacionDb c)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"¿Borrar la cotización {c.Numero} ({c.Obra})? No se puede deshacer.")) return;
+        try
+        {
+            await Cots.Borrar(c);
+            lista.Remove(c);
+            mensaje = $"Se borró {c.Numero}.";
+            mensajeOk = true;
+        }
+        catch (Exception ex) { mensaje = "No se pudo borrar: " + ex.Message; mensajeOk = false; }
+    }
+}
