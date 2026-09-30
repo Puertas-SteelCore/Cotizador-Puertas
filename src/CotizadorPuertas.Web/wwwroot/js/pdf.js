@@ -72,6 +72,7 @@
     campo("Obra:", d.obra, y + 12);
     campo("Contacto:", d.contacto, y + 28);
     campo("Ubicación:", d.ubicacion, y + 44);
+    campo("Vendedor:", d.vendedor, y + 60);
 
     const esp = [
       ["Marca", d.marca], ["Distribuidor", d.distribuidor], ["Modelo", d.linea], ["Acabado", d.acabado],
@@ -88,7 +89,7 @@
       headStyles: { fillColor: CLARO, textColor: TINTA, fontStyle: "bold" },
       columnStyles: { 0: { halign: "right", cellWidth: 72, fontStyle: "bold" }, 1: { halign: "center" } }
     });
-    y = Math.max(doc.lastAutoTable.finalY, yInfo + 52) + 12;
+    y = Math.max(doc.lastAutoTable.finalY, yInfo + 68) + 12;
 
     if (txt(d.especificacion).trim()) {
       doc.setFontSize(8);

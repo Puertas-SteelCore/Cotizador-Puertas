@@ -72,7 +72,7 @@
     celda("E" + r, txt(d.fecha).toUpperCase(), { font: { bold: true, size: 9 }, alignment: { horizontal: "right" } });
     r += 2;
 
-    const info = [["Obra:", d.obra], ["Contacto:", d.contacto], ["Ubicación:", d.ubicacion]];
+    const info = [["Obra:", d.obra], ["Contacto:", d.contacto], ["Ubicación:", d.ubicacion], ["Vendedor:", d.vendedor]];
     const esp = [["Marca:", d.marca], ["Distribuidor:", d.distribuidor], ["Modelo:", d.linea], ["Acabado:", d.acabado],
                  ["Color:", d.color], ["Color de marco:", d.colorMarco], ["Perfil:", d.colorPerfil]];
     unir("E" + r, "F" + r);
