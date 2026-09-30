@@ -104,7 +104,7 @@ public class CotizacionDb : BaseModel
     [Column("creado_en", ignoreOnInsert: true, ignoreOnUpdate: true)] public DateTime? CreadoEn { get; set; }
     [Column("actualizado_en", ignoreOnInsert: true, ignoreOnUpdate: true)] public DateTime? ActualizadoEn { get; set; }
 
-    public string Numero => Folio > 0 ? $"P.{Folio}" : "Nueva";
+    [Newtonsoft.Json.JsonIgnore] public string Numero => Folio > 0 ? $"P.{Folio}" : "Nueva";
 
     public DatosCotizacion Datos() => new()
     {
