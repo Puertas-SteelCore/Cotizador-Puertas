@@ -111,10 +111,10 @@ else
                     <option value="">Elige un color…</option>
                     @foreach (var grupo in Cat.Colores.Where(c => c.Activo).GroupBy(c => c.Tipo))
                     {
-                        <optgroup label="@(grupo.Key == "Línea" ? "Colores de línea" : "Especiales")">
+                        <optgroup label="@(grupo.Key == "Línea" ? "De Línea" : "Especiales")">
                             @foreach (var c in grupo)
                             {
-                                <option value="@c.Nombre">@c.Nombre</option>
+                                <option value="@c.Nombre">@c.Nombre (@(c.Tipo == "Línea" ? "De Línea" : "Especial"))</option>
                             }
                         </optgroup>
                     }

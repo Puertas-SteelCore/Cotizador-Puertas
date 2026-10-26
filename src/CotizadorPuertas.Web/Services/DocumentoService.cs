@@ -32,6 +32,13 @@ public class DocumentoService
         return plantilla.Replace("{perfil}", perfil);
     }
 
+    private string ColorConTipo(string color)
+    {
+        if (string.IsNullOrWhiteSpace(color)) return "";
+        var c = _cat.Colores.FirstOrDefault(x => string.Equals(x.Nombre, color, StringComparison.OrdinalIgnoreCase));
+        return $"{color} ({(c?.Tipo == "Línea" ? "De Línea" : "Especial")})";
+    }
+
     public object Datos(CotizacionDb c)
     {
         var t = Motor.Calcular(c.Datos());
@@ -56,7 +63,7 @@ public class DocumentoService
             distribuidor = c.Distribuidor,
             linea = c.Linea,
             acabado = c.Acabado,
-            color = c.Color,
+            color = ColorConTipo(c.Color),
             colorMarco = c.ColorMarco,
             colorPerfil = c.ColorPerfil,
             moneda = c.Moneda,
