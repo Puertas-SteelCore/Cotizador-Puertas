@@ -43,8 +43,9 @@
     const nuevaPagina = function () { doc.addPage(); y = 36; };
     const espacio = function (h) { if (y + h > LIMITE) nuevaPagina(); };
 
-    let s = ajustar(IM.sanimax, 78, 62);
-    imagen(doc, IM.sanimax, M, y, s.w, s.h);
+    const logoDist = d.logo === "sanimax" ? IM.sanimax : (d.logo ? await window.cotizadorImagenes.desdeData(d.logo) : null);
+    let s = ajustar(logoDist, 110, 62);
+    imagen(doc, logoDist, M, y, s.w, s.h);
     s = ajustar(IM.modumex, 160, 54);
     imagen(doc, IM.modumex, (W - s.w) / 2, y + 4, s.w, s.h);
     s = ajustar(IM.steelcore, 112, 50);
@@ -193,7 +194,7 @@
       const alto = 18 + banco.length * 10;
       doc.setDrawColor(...LINEA); doc.rect(M, yIzq, 262, alto);
       doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...AZUL);
-      doc.text("DATOS BANCARIOS" + (d.moneda === "USD" ? " (DÓLARES)" : " (PESOS)"), M + 6, yIzq + 11);
+      doc.text("DATOS BANCARIOS" + (d.bancoMoneda === "USD" ? " (DÓLARES)" : " (PESOS)"), M + 6, yIzq + 11);
       doc.setFont("helvetica", "normal"); doc.setTextColor(...TINTA); doc.setFontSize(7.5);
       doc.text(banco, M + 6, yIzq + 22);
       yIzq += alto;

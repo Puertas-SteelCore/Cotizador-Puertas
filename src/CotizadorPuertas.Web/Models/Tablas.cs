@@ -63,6 +63,31 @@ public class AjusteDb : BaseModel
     [Column("valor")] public string Valor { get; set; } = "";
 }
 
+[Table("cuenta_bancaria")]
+public class CuentaDb : BaseModel
+{
+    [PrimaryKey("id", false)] public long Id { get; set; }
+    [Column("nombre")] public string Nombre { get; set; } = "";
+    [Column("moneda")] public string Moneda { get; set; } = Monedas.MXN;
+    [Column("datos")] public string Datos { get; set; } = "";
+    [Column("activo")] public bool Activo { get; set; } = true;
+}
+
+[Table("distribuidor")]
+public class DistribuidorDb : BaseModel
+{
+    [PrimaryKey("id", false)] public long Id { get; set; }
+    [Column("nombre")] public string Nombre { get; set; } = "";
+    [Column("razon_social")] public string RazonSocial { get; set; } = "";
+    [Column("tipo")] public string Tipo { get; set; } = "Nacional";
+    [Column("cuenta_id")] public long? CuentaId { get; set; }
+    [Column("contacto")] public string Contacto { get; set; } = "";
+    [Column("ciudad")] public string Ciudad { get; set; } = "";
+    [Column("firma")] public string Firma { get; set; } = "";
+    [Column("logo")] public string? Logo { get; set; }
+    [Column("activo")] public bool Activo { get; set; } = true;
+}
+
 [Table("cotizacion")]
 public class CotizacionDb : BaseModel
 {
@@ -74,6 +99,7 @@ public class CotizacionDb : BaseModel
     [Column("ubicacion")] public string Ubicacion { get; set; } = "";
     [Column("marca")] public string Marca { get; set; } = "MODUMEX";
     [Column("distribuidor")] public string Distribuidor { get; set; } = "SANIMAX";
+    [Column("distribuidor_id")] public long? DistribuidorId { get; set; }
     [Column("linea")] public string Linea { get; set; } = "SteelCore";
     [Column("acabado")] public string Acabado { get; set; } = "LAMINADO COMPACTO 3 MM";
     [Column("color")] public string Color { get; set; } = "";

@@ -1,0 +1,302 @@
+@page "/admin/distribuidores"
+@inject CatalogoService Cat
+@inject AuthService Auth
+@inject IJSRuntime JS
+
+<h1>Distribuidores</h1>
+
+@if (!Auth.EsAdmin)
+{
+    <div class="aviso error">Solo el administrador puede gestionar distribuidores.</div>
+}
+else if (!Cat.Cargado)
+{
+    <p class="muted">Cargando…</p>
+}
+else
+{
+    @if (mensaje is not null)
+    {
+        <div class="aviso @(mensajeOk ? "ok" : "error")">@mensaje</div>
+    }
+
+    <div class="tarjeta">
+        <h2>@(dist.Id == 0 ? "Agregar distribuidor" : $"Editar {dist.Nombre}")</h2>
+        <div class="campos">
+            <label class="campo">Nombre
+                <input @bind="dist.Nombre" placeholder="Ej. SANIMAX" />
+            </label>
+            <label class="campo ancho2">Razón social
+                <input @bind="dist.RazonSocial" />
+            </label>
+            <label class="campo">Tipo
+                <select value="@dist.Tipo" @onchange="CambiarTipo">
+                    <option value="Nacional">Nacional</option>
+                    <option value="Internacional">Internacional</option>
+                </select>
+            </label>
+            <label class="campo ancho2">Cuenta bancaria que usa
+                <select value="@(dist.CuentaId?.ToString() ?? "")" @onchange="ElegirCuenta">
+                    <option value="">Sin cuenta</option>
+                    @foreach (var c in Cat.Cuentas.Where(c => c.Activo || c.Id == dist.CuentaId))
+                    {
+                        <option value="@c.Id">@c.Nombre (@c.Moneda)</option>
+                    }
+                </select>
+            </label>
+            <label class="campo">Contacto
+                <input @bind="dist.Contacto" />
+            </label>
+            <label class="campo">Ciudad / país
+                <input @bind="dist.Ciudad" />
+            </label>
+            <label class="campo ancho2">Firma en la cotización (una línea por renglón)
+                <textarea rows="2" @bind="dist.Firma" placeholder="NOMBRE DE QUIEN FIRMA&#10;RAZÓN SOCIAL"></textarea>
+            </label>
+            <label class="campo">Activo
+                <select @bind="dist.Activo">
+                    <option value="true">Sí</option>
+                    <option value="false">No (no aparece al cotizar)</option>
+                </select>
+            </label>
+            <div class="campo">
+                <span>Logo (sale en el PDF y el Excel)</span>
+                <InputFile OnChange="SubirLogo" accept="image/png,image/jpeg" />
+                @if (!string.IsNullOrEmpty(dist.Logo))
+                {
+                    <div style="display:flex;align-items:center;gap:.6rem;margin-top:.3rem">
+                        <img src="@dist.Logo" alt="Logo" style="max-height:48px;max-width:140px" />
+                        <button class="btn gris chico" @onclick="() => dist.Logo = null">Quitar logo</button>
+                    </div>
+                }
+            </div>
+        </div>
+        @if (CuentaElegida is { } ce)
+        {
+            <div class="aviso nota" style="margin-top:.8rem;white-space:pre-line"><b>Datos que saldrán en sus cotizaciones (@ce.Moneda):</b>
+@ce.Datos</div>
+        }
+        <div class="acciones" style="margin-top:.8rem">
+            <button class="btn" @onclick="GuardarDist" disabled="@ocupado">@(dist.Id == 0 ? "Agregar" : "Guardar cambios")</button>
+            @if (dist.Id != 0)
+            {
+                <button class="btn gris" @onclick="NuevoDist">Cancelar</button>
+            }
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <h2>Lista de distribuidores</h2>
+        @if (Cat.Distribuidores.Count == 0)
+        {
+            <div class="vacio">Todavía no hay distribuidores.</div>
+        }
+        else
+        {
+            <div class="scroll">
+                <table class="tabla">
+                    <thead><tr><th></th><th>Distribuidor</th><th>Razón social</th><th>Tipo</th><th>Cuenta bancaria</th><th>Ciudad</th><th>Activo</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var d in Cat.Distribuidores)
+                        {
+                            var di = d;
+                            var cu = Cat.Cuenta(di.CuentaId);
+                            <tr @key="di.Id" style="@(di.Activo ? "" : "opacity:.55")">
+                                <td style="width:70px">
+                                    @if (!string.IsNullOrEmpty(di.Logo))
+                                    {
+                                        <img src="@di.Logo" alt="" style="max-height:28px;max-width:60px" />
+                                    }
+                                </td>
+                                <td><b>@di.Nombre</b></td>
+                                <td>@di.RazonSocial</td>
+                                <td>@di.Tipo</td>
+                                <td>@(cu is null ? "—" : $"{cu.Nombre} ({cu.Moneda})")</td>
+                                <td>@di.Ciudad</td>
+                                <td>@(di.Activo ? "Sí" : "No")</td>
+                                <td>
+                                    <div class="acciones" style="flex-wrap:nowrap">
+                                        <button class="btn gris chico" @onclick="() => EditarDist(di)">Editar</button>
+                                        <button class="btn peligro chico" @onclick="() => BorrarDist(di)">Borrar</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <div class="tarjeta">
+        <h2>Cuentas bancarias</h2>
+        <p class="muted" style="margin-top:0">Cada distribuidor usa una de estas cuentas. El texto sale tal cual en el PDF y el Excel.</p>
+        <div class="campos">
+            <label class="campo ancho2">Nombre de la cuenta (para elegirla en la lista)
+                <input @bind="cuenta.Nombre" placeholder="Ej. Compact Doors - Nacional (pesos)" />
+            </label>
+            <label class="campo">Moneda
+                <select @bind="cuenta.Moneda">
+                    <option value="MXN">Pesos (MXN)</option>
+                    <option value="USD">Dólares (USD)</option>
+                </select>
+            </label>
+            <label class="campo">Activa
+                <select @bind="cuenta.Activo">
+                    <option value="true">Sí</option>
+                    <option value="false">No</option>
+                </select>
+            </label>
+            <label class="campo" style="grid-column:1/-1">Datos bancarios (una línea por renglón)
+                <textarea rows="6" @bind="cuenta.Datos"></textarea>
+            </label>
+        </div>
+        <div class="acciones" style="margin:.8rem 0 1rem">
+            <button class="btn" @onclick="GuardarCuenta" disabled="@ocupado">@(cuenta.Id == 0 ? "Agregar cuenta" : "Guardar cuenta")</button>
+            @if (cuenta.Id != 0)
+            {
+                <button class="btn gris" @onclick="NuevaCuenta">Cancelar</button>
+            }
+        </div>
+        <div class="scroll">
+            <table class="tabla">
+                <thead><tr><th>Cuenta</th><th>Moneda</th><th>Datos</th><th>La usan</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var c in Cat.Cuentas)
+                    {
+                        var cu = c;
+                        var usan = Cat.Distribuidores.Where(d => d.CuentaId == cu.Id).Select(d => d.Nombre).ToList();
+                        <tr @key="cu.Id" style="@(cu.Activo ? "" : "opacity:.55")">
+                            <td><b>@cu.Nombre</b></td>
+                            <td>@cu.Moneda</td>
+                            <td style="white-space:pre-line;font-size:.82rem">@cu.Datos</td>
+                            <td>@(usan.Count == 0 ? "—" : string.Join(", ", usan))</td>
+                            <td>
+                                <div class="acciones" style="flex-wrap:nowrap">
+                                    <button class="btn gris chico" @onclick="() => EditarCuenta(cu)">Editar</button>
+                                    <button class="btn peligro chico" @onclick="() => BorrarCuenta(cu, usan)">Borrar</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private DistribuidorDb dist = new();
+    private CuentaDb cuenta = new();
+    private bool ocupado;
+    private string? mensaje;
+    private bool mensajeOk;
+
+    private CuentaDb? CuentaElegida => Cat.Cuenta(dist.CuentaId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { await Cat.Cargar(true); }
+        catch (Exception ex) { Error(ex); }
+        NuevoDist();
+    }
+
+    private void Ok(string m) { mensaje = m; mensajeOk = true; }
+    private void Error(Exception ex) { mensaje = "No se pudo guardar: " + ex.Message; mensajeOk = false; }
+
+    private CuentaDb? CuentaSugerida(string tipo) =>
+        Cat.Cuentas.FirstOrDefault(c => c.Activo && c.Moneda == (tipo == "Internacional" ? Monedas.USD : Monedas.MXN) && c.Nombre.Contains("Compact", StringComparison.OrdinalIgnoreCase))
+        ?? Cat.Cuentas.FirstOrDefault(c => c.Activo && c.Moneda == (tipo == "Internacional" ? Monedas.USD : Monedas.MXN));
+
+    private void NuevoDist()
+    {
+        dist = new DistribuidorDb { Tipo = "Nacional", CuentaId = CuentaSugerida("Nacional")?.Id };
+    }
+
+    private void EditarDist(DistribuidorDb d)
+    {
+        dist = new DistribuidorDb
+        {
+            Id = d.Id, Nombre = d.Nombre, RazonSocial = d.RazonSocial, Tipo = d.Tipo, CuentaId = d.CuentaId, Contacto = d.Contacto,
+            Ciudad = d.Ciudad, Firma = d.Firma, Logo = d.Logo, Activo = d.Activo,
+        };
+    }
+
+    private void CambiarTipo(ChangeEventArgs e)
+    {
+        var tipo = e.Value?.ToString() ?? "Nacional";
+        var actual = Cat.Cuenta(dist.CuentaId);
+        dist.Tipo = tipo;
+        if (actual is null || actual.Moneda != (tipo == "Internacional" ? Monedas.USD : Monedas.MXN))
+            dist.CuentaId = CuentaSugerida(tipo)?.Id ?? dist.CuentaId;
+    }
+
+    private void ElegirCuenta(ChangeEventArgs e) =>
+        dist.CuentaId = long.TryParse(e.Value?.ToString(), out var id) ? id : null;
+
+    private async Task SubirLogo(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var f = e.File;
+            if (f.Size > 280_000) { mensaje = "El logo pesa más de 280 KB. Usa una imagen más chica."; mensajeOk = false; return; }
+            using var ms = new MemoryStream();
+            await f.OpenReadStream(300_000).CopyToAsync(ms);
+            var tipo = f.ContentType is "image/png" or "image/jpeg" ? f.ContentType : "image/png";
+            dist.Logo = $"data:{tipo};base64,{Convert.ToBase64String(ms.ToArray())}";
+            mensaje = null;
+        }
+        catch (Exception ex) { mensaje = "No se pudo leer la imagen: " + ex.Message; mensajeOk = false; }
+    }
+
+    private async Task GuardarDist()
+    {
+        if (string.IsNullOrWhiteSpace(dist.Nombre)) { mensaje = "Escribe el nombre del distribuidor."; mensajeOk = false; return; }
+        ocupado = true;
+        try
+        {
+            var nuevo = dist.Id == 0;
+            await Cat.GuardarDistribuidor(dist);
+            Ok(nuevo ? $"Se agregó {dist.Nombre.Trim().ToUpperInvariant()}." : "Cambios guardados.");
+            NuevoDist();
+        }
+        catch (Exception ex) { mensaje = "No se pudo guardar (¿ya existe ese nombre?): " + ex.Message; mensajeOk = false; }
+        ocupado = false;
+    }
+
+    private async Task BorrarDist(DistribuidorDb d)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"¿Borrar a {d.Nombre}? Sus cotizaciones se conservan. Si solo quieres ocultarlo, márcalo como inactivo.")) return;
+        try { await Cat.BorrarDistribuidor(d); Ok($"Se borró {d.Nombre}."); }
+        catch (Exception ex) { Error(ex); }
+    }
+
+    private void NuevaCuenta() => cuenta = new CuentaDb();
+
+    private void EditarCuenta(CuentaDb c) =>
+        cuenta = new CuentaDb { Id = c.Id, Nombre = c.Nombre, Moneda = c.Moneda, Datos = c.Datos, Activo = c.Activo };
+
+    private async Task GuardarCuenta()
+    {
+        if (string.IsNullOrWhiteSpace(cuenta.Nombre) || string.IsNullOrWhiteSpace(cuenta.Datos))
+        { mensaje = "Escribe el nombre de la cuenta y sus datos bancarios."; mensajeOk = false; return; }
+        ocupado = true;
+        try
+        {
+            var nueva = cuenta.Id == 0;
+            await Cat.GuardarCuenta(cuenta);
+            Ok(nueva ? "Cuenta agregada." : "Cuenta guardada.");
+            NuevaCuenta();
+        }
+        catch (Exception ex) { mensaje = "No se pudo guardar (¿ya existe ese nombre?): " + ex.Message; mensajeOk = false; }
+        ocupado = false;
+    }
+
+    private async Task BorrarCuenta(CuentaDb c, List<string> usan)
+    {
+        var aviso = usan.Count > 0 ? $" La usan {string.Join(", ", usan)}: se quedarán sin cuenta." : "";
+        if (!await JS.InvokeAsync<bool>("confirm", $"¿Borrar la cuenta {c.Nombre}?{aviso}")) return;
+        try { await Cat.BorrarCuenta(c); Ok("Cuenta borrada."); }
+        catch (Exception ex) { Error(ex); }
+    }
+}

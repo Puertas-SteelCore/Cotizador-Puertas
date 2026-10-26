@@ -38,6 +38,12 @@ public class DocumentoService
         double D(decimal x) => (double)x;
         var nombre = Regex.Replace($"Cotizacion {c.Numero} {c.Obra}".Trim(), @"[^\w\.\- ]+", "").Trim();
 
+        var dist = _cat.Distribuidor(c.DistribuidorId, c.Distribuidor);
+        var cuenta = _cat.Cuenta(dist?.CuentaId);
+        var firma = dist is null ? _cat.Ajuste("firma") : dist.Firma;
+        var logo = !string.IsNullOrEmpty(dist?.Logo) ? dist!.Logo
+            : string.Equals(c.Distribuidor, "SANIMAX", StringComparison.OrdinalIgnoreCase) ? "sanimax" : null;
+
         return new
         {
             archivo = nombre,
@@ -93,10 +99,12 @@ public class DocumentoService
                 anticipo = D(t.Anticipo),
                 saldo = D(t.Saldo),
             },
-            banco = c.Moneda == Monedas.USD ? _cat.Ajuste("banco_usd") : _cat.Ajuste("banco_mxn"),
+            banco = cuenta?.Datos ?? (c.Moneda == Monedas.USD ? _cat.Ajuste("banco_usd") : _cat.Ajuste("banco_mxn")),
+            bancoMoneda = cuenta?.Moneda ?? c.Moneda,
+            logo,
             tiempoEntrega = c.TiempoEntrega,
             observaciones = c.Observaciones,
-            firma = _cat.Ajuste("firma"),
+            firma,
             vendedor = c.Vendedor,
         };
     }

@@ -32,7 +32,60 @@ public class CatalogoService
         Productos = (await _supa.From<ProductoDb>().Order(p => p.Orden, Ordering.Ascending).Get()).Models;
         Colores = (await _supa.From<ColorDb>().Order(c => c.Orden, Ordering.Ascending).Get()).Models;
         Ajustes = (await _supa.From<AjusteDb>().Get()).Models.ToDictionary(a => a.Clave, a => a.Valor);
+        try
+        {
+            Cuentas = (await _supa.From<CuentaDb>().Order(c => c.Nombre, Ordering.Ascending).Get()).Models;
+            Distribuidores = (await _supa.From<DistribuidorDb>().Order(d => d.Nombre, Ordering.Ascending).Get()).Models;
+        }
+        catch
+        {
+            Cuentas = new();
+            Distribuidores = new();
+        }
         Cargado = true;
+    }
+
+    public List<CuentaDb> Cuentas { get; private set; } = new();
+    public List<DistribuidorDb> Distribuidores { get; private set; } = new();
+
+    public DistribuidorDb? Distribuidor(long? id, string? nombre = null) =>
+        Distribuidores.FirstOrDefault(d => id != null && d.Id == id)
+        ?? Distribuidores.FirstOrDefault(d => !string.IsNullOrWhiteSpace(nombre) && string.Equals(d.Nombre, nombre, StringComparison.OrdinalIgnoreCase));
+
+    public CuentaDb? Cuenta(long? id) => id is null ? null : Cuentas.FirstOrDefault(c => c.Id == id);
+
+    public CuentaDb? CuentaDe(long? distribuidorId, string? nombre) => Cuenta(Distribuidor(distribuidorId, nombre)?.CuentaId);
+
+    public async Task GuardarDistribuidor(DistribuidorDb d)
+    {
+        await _auth.AsegurarSesion();
+        d.Nombre = d.Nombre.Trim().ToUpperInvariant();
+        if (d.Id == 0) await _supa.From<DistribuidorDb>().Insert(d);
+        else await _supa.From<DistribuidorDb>().Update(d);
+        await Cargar(true);
+    }
+
+    public async Task BorrarDistribuidor(DistribuidorDb d)
+    {
+        await _auth.AsegurarSesion();
+        await _supa.From<DistribuidorDb>().Where(x => x.Id == d.Id).Delete();
+        await Cargar(true);
+    }
+
+    public async Task GuardarCuenta(CuentaDb c)
+    {
+        await _auth.AsegurarSesion();
+        c.Nombre = c.Nombre.Trim();
+        if (c.Id == 0) await _supa.From<CuentaDb>().Insert(c);
+        else await _supa.From<CuentaDb>().Update(c);
+        await Cargar(true);
+    }
+
+    public async Task BorrarCuenta(CuentaDb c)
+    {
+        await _auth.AsegurarSesion();
+        await _supa.From<CuentaDb>().Where(x => x.Id == c.Id).Delete();
+        await Cargar(true);
     }
 
     public string Ajuste(string clave, string def = "") =>

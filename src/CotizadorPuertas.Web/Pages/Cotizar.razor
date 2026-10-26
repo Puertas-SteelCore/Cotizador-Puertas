@@ -85,7 +85,20 @@ else
                 <select @bind="cot.Marca"><option value="MODUMEX">MODUMEX</option></select>
             </label>
             <label class="campo">Distribuidor
-                <select @bind="cot.Distribuidor"><option value="SANIMAX">SANIMAX</option></select>
+                <select value="@DistSel" @onchange="ElegirDistribuidor">
+                    @if (Cat.Distribuidores.Count == 0 || Cat.Distribuidor(cot.DistribuidorId, cot.Distribuidor) is null)
+                    {
+                        <option value="@DistSel">@cot.Distribuidor</option>
+                    }
+                    @foreach (var d in Cat.Distribuidores.Where(d => d.Activo || d.Id == cot.DistribuidorId))
+                    {
+                        <option value="@d.Id">@d.Nombre</option>
+                    }
+                </select>
+                @if (Cat.CuentaDe(cot.DistribuidorId, cot.Distribuidor) is { } cta)
+                {
+                    <span class="muted" style="font-weight:400" title="@cta.Datos">Cuenta: @cta.Nombre</span>
+                }
             </label>
             <label class="campo">Línea
                 <select @bind="cot.Linea"><option value="SteelCore">SteelCore</option></select>
@@ -430,7 +443,20 @@ else
         cargando = false;
     }
 
-    private CotizacionDb NuevaCot() => new()
+    private CotizacionDb NuevaCot()
+    {
+        var c = NuevaBase();
+        var d = Cat.Distribuidor(null, "SANIMAX") is { Activo: true } s ? s : Cat.Distribuidores.FirstOrDefault(x => x.Activo);
+        if (d is not null)
+        {
+            c.DistribuidorId = d.Id;
+            c.Distribuidor = d.Nombre;
+            if (Cat.Cuenta(d.CuentaId) is { } cta) c.Moneda = cta.Moneda;
+        }
+        return c;
+    }
+
+    private CotizacionDb NuevaBase() => new()
     {
         Fecha = DateTime.Today,
         IvaPct = Cat.AjusteNum("iva", 0.16m),
@@ -520,9 +546,25 @@ else
         if (long.TryParse(valor, out var id) && Cat.Producto(id) is { } prod) Arm.Asignar(i, prod, cot.Moneda);
     }
 
-    private void CambiarMoneda(ChangeEventArgs e)
+    private string DistSel => Cat.Distribuidor(cot.DistribuidorId, cot.Distribuidor)?.Id.ToString() ?? "";
+
+    private void ElegirDistribuidor(ChangeEventArgs e)
     {
-        var nueva = e.Value?.ToString() ?? Monedas.MXN;
+        if (!long.TryParse(e.Value?.ToString(), out var id) || Cat.Distribuidor(id) is not { } d) return;
+        cot.DistribuidorId = d.Id;
+        cot.Distribuidor = d.Nombre;
+        var cta = Cat.Cuenta(d.CuentaId);
+        if (cta is not null && cta.Moneda != cot.Moneda)
+        {
+            AplicarMoneda(cta.Moneda);
+            nota = $"{d.Nombre} usa la cuenta en {cta.Moneda}: la cotización pasó a {cta.Moneda}. " + nota;
+        }
+    }
+
+    private void CambiarMoneda(ChangeEventArgs e) => AplicarMoneda(e.Value?.ToString() ?? Monedas.MXN);
+
+    private void AplicarMoneda(string nueva)
+    {
         if (nueva == cot.Moneda) return;
         cot.Moneda = nueva;
         foreach (var p in cot.Partidas) Arm.Recalcular(p, nueva);

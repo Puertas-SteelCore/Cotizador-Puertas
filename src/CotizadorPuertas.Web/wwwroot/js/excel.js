@@ -40,7 +40,8 @@
       ws.addImage(id, { tl: { col: col, row: row }, ext: { width: w, height: h } });
     };
     for (let r = 1; r <= 5; r++) ws.getRow(r).height = 16;
-    logo(IM.sanimax, 0.1, 0.2, 95, 76);
+    const logoDist = d.logo === "sanimax" ? IM.sanimax : (d.logo ? await window.cotizadorImagenes.desdeData(d.logo) : null);
+    logo(logoDist, 0.1, 0.2, 120, 76);
     logo(IM.modumex, 1.55, 0.6, 200, 66);
     logo(IM.steelcore, 4.3, 0.8, 140, 60);
 
@@ -208,7 +209,7 @@
       });
       r++;
     };
-    bloque("DATOS BANCARIOS" + (d.moneda === "USD" ? " (DÓLARES):" : " (PESOS):"), d.banco);
+    bloque("DATOS BANCARIOS" + (d.bancoMoneda === "USD" ? " (DÓLARES):" : " (PESOS):"), d.banco);
     bloque("TIEMPO DE ENTREGA:", d.tiempoEntrega);
     bloque("OBSERVACIONES:", d.observaciones);
 

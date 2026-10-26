@@ -31,6 +31,14 @@
   }
 
   window.cotizadorImagenes = {
+    desdeData: function (data) {
+      return new Promise(function (ok) {
+        const img = new Image();
+        img.onload = function () { ok({ data: data, w: img.naturalWidth, h: img.naturalHeight, tipo: data.indexOf("image/png") >= 0 ? "PNG" : "JPEG" }); };
+        img.onerror = function () { ok(null); };
+        img.src = data;
+      });
+    },
     cargar: async function () {
       if (cache) return cache;
       const r = {};

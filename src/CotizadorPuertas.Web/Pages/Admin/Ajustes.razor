@@ -20,17 +20,7 @@ else
     }
     <p class="muted">Estos textos y valores se usan en las cotizaciones <b>nuevas</b>. Las que ya están guardadas no cambian.</p>
 
-    <div class="tarjeta">
-        <h2>Datos bancarios</h2>
-        <div class="campos" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
-            <label class="campo">Cuenta en pesos (sale cuando la cotización es en MXN)
-                <textarea rows="7" @bind='valores["banco_mxn"]'></textarea>
-            </label>
-            <label class="campo">Cuenta en dólares (sale cuando la cotización es en USD)
-                <textarea rows="7" @bind='valores["banco_usd"]'></textarea>
-            </label>
-        </div>
-    </div>
+    <div class="aviso nota">Las cuentas bancarias ahora van por distribuidor: se eligen en <a href="admin/distribuidores">Distribuidores</a>.</div>
 
     <div class="tarjeta">
         <h2>Cálculo</h2>
@@ -65,7 +55,7 @@ else
             <label class="campo">Observaciones
                 <textarea rows="5" @bind='valores["observaciones"]'></textarea>
             </label>
-            <label class="campo">Firma (una línea por renglón)
+            <label class="campo">Firma por defecto (solo si la cotización no tiene un distribuidor registrado)
                 <textarea rows="2" @bind='valores["firma"]'></textarea>
             </label>
         </div>
