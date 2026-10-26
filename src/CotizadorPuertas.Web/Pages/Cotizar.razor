@@ -109,12 +109,13 @@ else
             <label class="campo">Color
                 <select value="@colorSel" @onchange="ElegirColor">
                     <option value="">Elige un color…</option>
+                    <option value="@DE_LINEA">DE LÍNEA</option>
                     @foreach (var grupo in Cat.Colores.Where(c => c.Activo).GroupBy(c => c.Tipo))
                     {
-                        <optgroup label="@(grupo.Key == "Línea" ? "De Línea" : "Especiales")">
+                        <optgroup label="@(grupo.Key == "Línea" ? "Colores de línea" : "Especiales")">
                             @foreach (var c in grupo)
                             {
-                                <option value="@c.Nombre">@c.Nombre (@(c.Tipo == "Línea" ? "De Línea" : "Especial"))</option>
+                                <option value="@c.Nombre">@c.Nombre</option>
                             }
                         </optgroup>
                     }
@@ -398,6 +399,7 @@ else
     [SupplyParameterFromQuery(Name = "copiar")] public string? Copiar { get; set; }
 
     private const string OTRO = "__otro";
+    private const string DE_LINEA = "DE LÍNEA";
     private CotizacionDb cot = new();
     private bool cargando = true;
     private bool ocupado;
@@ -469,7 +471,7 @@ else
     private void SincronizarColor()
     {
         if (string.IsNullOrWhiteSpace(cot.Color)) colorSel = "";
-        else if (Cat.Colores.Any(c => c.Nombre == cot.Color)) colorSel = cot.Color;
+        else if (cot.Color == DE_LINEA || Cat.Colores.Any(c => c.Nombre == cot.Color)) colorSel = cot.Color;
         else colorSel = OTRO;
     }
 
