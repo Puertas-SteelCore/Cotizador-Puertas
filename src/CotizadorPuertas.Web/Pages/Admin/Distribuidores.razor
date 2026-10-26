@@ -54,7 +54,7 @@ else
                 <textarea rows="2" @bind="dist.Firma" placeholder="NOMBRE DE QUIEN FIRMA&#10;RAZÓN SOCIAL"></textarea>
             </label>
             <label class="campo">Activo
-                <select @bind="dist.Activo">
+                <select value='@(dist.Activo ? "true" : "false")' @onchange='e => dist.Activo = e.Value?.ToString() == "true"'>
                     <option value="true">Sí</option>
                     <option value="false">No (no aparece al cotizar)</option>
                 </select>
@@ -142,7 +142,7 @@ else
                 </select>
             </label>
             <label class="campo">Activa
-                <select @bind="cuenta.Activo">
+                <select value='@(cuenta.Activo ? "true" : "false")' @onchange='e => cuenta.Activo = e.Value?.ToString() == "true"'>
                     <option value="true">Sí</option>
                     <option value="false">No</option>
                 </select>

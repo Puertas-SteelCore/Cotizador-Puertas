@@ -59,7 +59,7 @@ else
                 <input type="number" step="1" class="num" @bind="edit.Orden" />
             </label>
             <label class="campo">Activo
-                <select @bind="edit.Activo">
+                <select value='@(edit.Activo ? "true" : "false")' @onchange='e => edit.Activo = e.Value?.ToString() == "true"'>
                     <option value="true">Sí</option>
                     <option value="false">No (no aparece al cotizar)</option>
                 </select>
